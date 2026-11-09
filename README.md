@@ -23,16 +23,30 @@ A small framework for single-binary web apps built and maintained by AI agents.
 
 ## Quick start
 
-Requirements: Rust (stable), Bun, Postgres, `just`, and `sqlx-cli` for the
-offline query cache (`cargo install sqlx-cli --no-default-features --features postgres,rustls`).
+Requirements: Rust, Bun, and Docker (or your own Postgres). On macOS:
 
 ```sh
-cp .env.example .env          # point DATABASE_URL at your Postgres
-just setup                    # bun install, create + migrate the dev DB
-just check                    # regenerate all types and check everything
-just dev                      # backend on :3000 (http + workers + cron)
-just web-dev                  # frontend on :5173 with hot reload
+brew install rustup bun just && rustup default stable
+just dev                      # Postgres + api on :3000 + Vite on :5173, in the background
+just check                    # the loop: regenerate, compile, typecheck, reload the api
 ```
+
+Local development is built for agents, so every command finishes only when
+its result is ready, and logs go to files rather than a terminal stream:
+
+- `just dev` creates `.env` if missing, starts Postgres with Docker
+  (`compose.yaml`) unless `DATABASE_URL` is reachable, installs frontend
+  dependencies, runs `just check`, then starts the api and Vite in the
+  background. It returns once both answer. Running it again is a no-op.
+- `just check` reloads the running api after a passing check and waits for
+  `/readyz`, so the next request or page load runs the code you just wrote.
+  If the new binary crashes on startup, the check fails with its log lines.
+- Vite hot-reloads frontend changes in place.
+- `just logs` prints warnings and errors since the api last started (`just logs all`
+  for everything). `just dev status` and `just dev stop` do what they say.
+  State and logs live in `.dev/`.
+
+`sqlx-cli` (`brew install sqlx-cli`) is only needed for `just verify`.
 
 ## One command
 

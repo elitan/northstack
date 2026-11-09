@@ -6,7 +6,8 @@ set dotenv-load := true
 default:
     @just --list
 
-# Fast loop: migrate, Postgres -> Rust types, compile, Rust -> TS types, typecheck.
+# Fast loop: migrate, Postgres -> Rust types, compile, Rust -> TS types, typecheck,
+# then reload the dev api if `just dev` is running.
 check:
     @./scripts/check.sh
 
@@ -35,13 +36,15 @@ db-reset:
 new-feature name:
     ./scripts/new-feature.sh {{name}}
 
-# Run the backend (http + workers + cron) on :3000.
-dev:
-    cargo run -p app
+# Local dev environment in the background: Postgres (Docker if needed), api on
+# :3000, Vite on :5173. Returns once both are ready. `just check` reloads the api.
+# Subcommands: `just dev stop`, `just dev status`, `just dev reload`.
+dev *args:
+    @./scripts/dev.sh {{args}}
 
-# Run the Vite dev server on :5173 (proxies /rpc to :3000).
-web-dev:
-    cd web && bun run dev
+# Recent warnings and errors from the dev api and Vite (`just logs all`: everything).
+logs *args:
+    @./scripts/dev.sh logs {{args}}
 
 # Release binary with the frontend embedded: target/release/app
 build:

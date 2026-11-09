@@ -6,6 +6,11 @@
 #   scripts/check.sh --full    + format, lint, tests, offline query cache, frontend build
 #   scripts/check.sh --ci      like --full, but verifies generated files instead of
 #                              writing them (fails if someone forgot to regenerate)
+#   --no-reload                don't restart the running dev server
+#
+# If the dev server is running (`just dev`), a passing check restarts the api
+# with the new binary and returns only once it is ready, so whatever you call
+# or open next runs the code you just wrote.
 #
 # Exit code 0 means everything passed.
 
@@ -13,10 +18,12 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 MODE="check"
+RELOAD=1
 for arg in "$@"; do
   case "$arg" in
     --full) MODE="full" ;;
-    --ci) MODE="ci" ;;
+    --ci) MODE="ci"; RELOAD=0 ;;
+    --no-reload) RELOAD=0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -77,6 +84,12 @@ typecheck() {
 step typecheck \
   "The frontend no longer matches the API or routes. Current API types: web/src/rpc/types/ and web/src/rpc/procedures.ts. Update the React code; never edit generated files." \
   typecheck
+
+if [[ $RELOAD == 1 && -f .dev/active ]]; then
+  step reload \
+    "The api compiled but crashed on startup. Read the log lines above (full log: .dev/api.log), fix, and run 'just check' again." \
+    ./scripts/dev.sh reload
+fi
 
 if [[ $MODE == "check" ]]; then
   printf '\nall checks passed in %ss (run with --full before committing)\n' "$(( $(date +%s) - START ))"

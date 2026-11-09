@@ -12,11 +12,16 @@ Types flow one way, and every step is generated:
 migration.sql -> Postgres -> app/src/db/schema.rs -> Rust code -> web/src/rpc/ -> React
 ```
 
+0. Run **`just dev`** once. It starts Postgres, the api (:3000) and Vite (:5173)
+   in the background and returns when they are ready.
 1. Make your change (migration, Rust, React).
 2. Run **`just check`** and fix what it reports. Repeat until it passes. It
    applies migrations, regenerates Rust types from Postgres, compiles,
    regenerates TypeScript types from Rust, and type-checks React, in that order.
-   It prints only failures, each with a "how to fix" line.
+   It prints only failures, each with a "how to fix" line. When it passes it
+   reloads the running api and waits until it is ready, so any request or page
+   you open afterwards runs your new code. Frontend changes hot-reload on their
+   own. `just logs` shows warnings and errors since the api started.
 3. Run **`just verify`** before you're done: `check` plus formatting, clippy
    (warnings are errors), all tests, the offline query cache, and the frontend
    build. A change is done only when it passes. Commit the generated files.
@@ -60,7 +65,9 @@ web/
 | New migration | `just migration <name>`, edit the printed file, `just check` |
 | New feature skeleton | `just new-feature <snake_name>` |
 | Start the dev database over | `just db-reset` |
-| Run backend / frontend | `just dev` / `just web-dev` |
+| Start the local environment (idempotent) | `just dev`, then use http://localhost:5173 |
+| Warnings and errors from the running app | `just logs` (`just logs all` for full output) |
+| Is it running? / stop it | `just dev status` / `just dev stop` |
 
 ## Database types
 
