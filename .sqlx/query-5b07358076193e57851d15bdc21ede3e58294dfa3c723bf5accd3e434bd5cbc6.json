@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            count(*)                                   AS \"total!\",\n            count(*) FILTER (WHERE done)               AS \"done!\",\n            COALESCE(sum(word_count), 0)::bigint       AS \"words!\",\n            (SELECT max(day) FROM note_digests)        AS last_digest_day\n        FROM notes\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "done!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "words!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_digest_day",
+        "type_info": "Date",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5b07358076193e57851d15bdc21ede3e58294dfa3c723bf5accd3e434bd5cbc6"
+}

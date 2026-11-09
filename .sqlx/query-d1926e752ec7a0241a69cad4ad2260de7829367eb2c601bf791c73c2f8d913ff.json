@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE notes SET\n            title      = COALESCE($2, title),\n            body       = COALESCE($3, body),\n            done       = COALESCE($4, done),\n            priority   = COALESCE($5, priority),\n            word_count = CASE WHEN $3::text IS NULL THEN word_count ELSE NULL END,\n            updated_at = now()\n        WHERE id = $1\n        RETURNING id, title, body, done, word_count, created_at, updated_at,\n                  priority AS \"priority: NotePriority\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "done",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "done"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "word_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "word_count"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "priority: NotePriority",
+        "type_info": {
+          "Custom": {
+            "name": "note_priority",
+            "kind": {
+              "Enum": [
+                "low",
+                "normal",
+                "high"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "priority"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool",
+        {
+          "Custom": {
+            "name": "note_priority",
+            "kind": {
+              "Enum": [
+                "low",
+                "normal",
+                "high"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d1926e752ec7a0241a69cad4ad2260de7829367eb2c601bf791c73c2f8d913ff"
+}

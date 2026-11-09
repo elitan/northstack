@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO notes (title, body, priority) VALUES ($1, $2, $3)\n        RETURNING id, title, body, done, word_count, created_at, updated_at,\n                  priority AS \"priority: NotePriority\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "done",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "done"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "word_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "word_count"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "priority: NotePriority",
+        "type_info": {
+          "Custom": {
+            "name": "note_priority",
+            "kind": {
+              "Enum": [
+                "low",
+                "normal",
+                "high"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "priority"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "note_priority",
+            "kind": {
+              "Enum": [
+                "low",
+                "normal",
+                "high"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9b2ffd9df36076a5865f61946cb1245873669934864ef68e1b2256813a91e23f"
+}

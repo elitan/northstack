@@ -1,0 +1,21 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+northstack = { path = "../crates/northstack" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", features = ["postgres", "runtime-tokio", "chrono", "uuid", "json", "migrate", "macros", "tls-rustls-ring-webpki", "bigdecimal"] }
+ts-rs = { version = "12", features = ["chrono-impl", "uuid-impl", "serde-json-impl", "bigdecimal-impl"] }
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["serde", "v4"] }
+rust-embed = "8"
+tracing = "0.1"
+bigdecimal = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]

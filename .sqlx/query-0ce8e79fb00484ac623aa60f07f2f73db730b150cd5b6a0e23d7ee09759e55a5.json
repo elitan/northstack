@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO note_digests (day, total, done, words)\n        SELECT $1, count(*), count(*) FILTER (WHERE done), COALESCE(sum(word_count), 0)\n        FROM notes WHERE created_at < ($1::date + 1)\n        ON CONFLICT (day) DO UPDATE\n            SET total = EXCLUDED.total, done = EXCLUDED.done, words = EXCLUDED.words,\n                created_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ce8e79fb00484ac623aa60f07f2f73db730b150cd5b6a0e23d7ee09759e55a5"
+}

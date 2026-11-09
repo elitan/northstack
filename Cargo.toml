@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["crates/northstack", "app"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+
+# Faster dev builds: optimize dependencies, keep our code quick to compile.
+[profile.dev.package."*"]
+opt-level = 1
