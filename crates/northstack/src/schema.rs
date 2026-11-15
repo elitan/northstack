@@ -166,7 +166,11 @@ impl Schema {
         };
 
         let mut out = String::from(HEADER);
-        out.push_str("\nuse serde::{Deserialize, Serialize};\nuse ts_rs::TS;\n");
+        // No imports for an empty schema: they'd be unused (a warning, and
+        // `just verify` treats warnings as errors).
+        if !self.tables.is_empty() || !self.enums.is_empty() {
+            out.push_str("\nuse serde::{Deserialize, Serialize};\nuse ts_rs::TS;\n");
+        }
 
         for (pg_name, labels) in &self.enums {
             let name = pascal(pg_name);

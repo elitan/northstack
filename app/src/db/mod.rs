@@ -3,4 +3,6 @@
 
 mod schema;
 
+// Allowed so an app without tables yet (e.g. after `just remove-example`) has no warning.
+#[allow(unused_imports)]
 pub use schema::*;

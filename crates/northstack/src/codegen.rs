@@ -217,7 +217,23 @@ impl<S: Clone + Send + Sync + 'static> Rpc<S> {
         }
         check(&root, "");
         let mut out = String::from(HEADER);
-        out.push_str("import { mutation, query } from \"./react\";\n\n");
+        // Import only what's used: an unused import fails the type check
+        // (e.g. an app with no mutations yet, or no procedures at all).
+        let used: Vec<&str> = [
+            (crate::Kind::Mutation, "mutation"),
+            (crate::Kind::Query, "query"),
+        ]
+        .into_iter()
+        .filter(|(k, _)| self.procedures.values().any(|p| p.kind == *k))
+        .map(|(_, f)| f)
+        .collect();
+        if !used.is_empty() {
+            out.push_str(&format!(
+                "import {{ {} }} from \"./react\";\n",
+                used.join(", ")
+            ));
+        }
+        out.push('\n');
         out.push_str(
             "/** Every procedure, nested by name: `api.notes.list`, `api.notes.create`, ... */\n",
         );

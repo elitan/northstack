@@ -28,3 +28,6 @@ jobs:
       # Migrates a fresh database, then verifies every generated file is up to
       # date and runs format, lint, tests and the frontend build.
       - run: just ci
+      # The README is the product: run its walkthrough exactly as written,
+      # starting from `just remove-example`, in a temporary copy.
+      - run: just readme-test

@@ -36,7 +36,8 @@ type SuspenseOpts<K extends QueryName> = Omit<
  * ```
  */
 export function query<K extends QueryName>(name: K) {
-  const path = name.split(".");
+  // `as string`: with no queries at all, K is `never` and has no methods.
+  const path = (name as string).split(".");
   const queryOptions = (input: Input<K>, options?: QueryOpts<K>) =>
     tanstackQueryOptions<Output<K>, RpcClientError, Output<K>, QueryKey>({
       queryKey: [...path, input ?? null],
@@ -101,7 +102,7 @@ export function mutation<K extends MutationName>(name: K) {
 
 /** Refetch everything under the given namespaces / queries. */
 export function invalidate(queryClient: QueryClient, ...targets: InvalidateTarget[]) {
-  return Promise.all(targets.map((t) => queryClient.invalidateQueries({ queryKey: t.split(".") })));
+  return Promise.all(targets.map((t) => queryClient.invalidateQueries({ queryKey: (t as string).split(".") })));
 }
 
 /** Hook form of `invalidate`. */

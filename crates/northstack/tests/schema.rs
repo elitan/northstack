@@ -106,3 +106,16 @@ async fn reports_name_collisions(pool: PgPool) {
         .to_string();
     assert!(err.contains("would both be named `Note`"), "{err}");
 }
+
+#[sqlx::test(migrations = false)]
+async fn empty_schema_has_no_unused_imports(pool: PgPool) {
+    // An app without tables (e.g. after `just remove-example`) must compile
+    // without warnings, so the generated file has no imports to leave unused.
+    let src = Schema::load(&pool, "public")
+        .await
+        .unwrap()
+        .render()
+        .unwrap();
+    assert!(!src.contains("use serde"), "unexpected imports:\n{src}");
+    assert!(!src.contains("use ts_rs"), "unexpected imports:\n{src}");
+}

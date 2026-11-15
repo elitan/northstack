@@ -24,6 +24,16 @@ setup:
     cd web && bun install
     cargo run -q -p northstack --bin northstack -- migrate
 
+# Prove the README is true: docs paths exist, and the "Building a feature"
+# walkthrough runs as written in a temporary copy (own database). CI runs it.
+readme-test:
+    @python3 scripts/readme_test.py
+
+# Delete the example "notes" app and start from an empty app (refuses on
+# uncommitted changes; `just remove-example --force` skips that check).
+remove-example *args:
+    @./scripts/remove-example.sh {{args}}
+
 # Create a new app migration: `just migration add_tags`.
 migration name:
     @cargo run -q -p northstack --bin northstack -- migration {{name}}

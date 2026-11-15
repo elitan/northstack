@@ -205,6 +205,8 @@ AGENTS.md                 Entry point for coding agents: the loop and the hard r
 scripts/check.sh          The one check command (see below)
 scripts/dev.sh            Local environment: start, stop, status, reload, logs
 scripts/new-feature.sh    Scaffolds a feature folder and registers it
+scripts/remove-example.sh Deletes the example app (just remove-example)
+scripts/readme_test.py    Runs the README walkthrough as written (just readme-test)
 compose.yaml              Local Postgres for development
 .sqlx/                    GENERATED offline query cache (lets builds run without a DB)
 Dockerfile, justfile, .github/workflows/ci.yml
@@ -298,6 +300,8 @@ All commands:
 | `just migration <name>` | Create `app/migrations/<timestamp>_<name>.sql` |
 | `just new-feature <name>` | Scaffold `app/src/features/<name>/` and register it |
 | `just db-reset` | Drop, recreate and migrate the dev database (destroys data) |
+| `just remove-example` | Delete the example app and start from an empty one |
+| `just readme-test` | Prove this README is true: run the feature walkthrough as written (CI runs it) |
 | `just build` | Release binary with the frontend embedded: `target/release/app` |
 | `just fmt` | Format Rust code |
 
@@ -305,17 +309,27 @@ Logs and process state live in `.dev/` (`api.log`, `web.log`).
 
 ## Building a feature, end to end
 
-This walks through adding a feature called `projects`. Every step names the
-file in the notes example that shows the same pattern.
+This walks through adding a feature called `projects`. Every step shows the
+complete file, and names the file in the notes example that shows the same
+pattern. CI runs this walkthrough exactly as written (`just readme-test`), so it
+always matches the framework.
 
-**1. Scaffold.** `just new-feature projects` creates
-`app/src/features/projects/` with the five files, registers it in
-`app/src/lib.rs` and `app/src/features/mod.rs`, and adds a `projects.ping`
-procedure so it compiles immediately.
+**1. Scaffold.**
 
-**2. Schema.** `just migration create_projects`, then write SQL in the printed
-file (example: `app/migrations/20261108000001_notes.sql`):
+<!-- readme-test: run -->
+```sh
+just new-feature projects
+```
 
+This creates `app/src/features/projects/` with the five files, registers the
+feature in `app/src/lib.rs` and `app/src/features/mod.rs`, and adds a
+`projects.ping` procedure and a test so it compiles and passes immediately. The
+next steps replace those placeholder files.
+
+**2. Schema.** `just migration create_projects` prints the new file's path.
+Write the SQL there (example: `app/migrations/20261108000001_notes.sql`):
+
+<!-- readme-test: migration create_projects -->
 ```sql
 CREATE TYPE project_status AS ENUM ('active', 'archived');
 
@@ -328,13 +342,19 @@ CREATE TABLE projects (
 COMMENT ON TABLE projects IS 'A project owned by a team.';
 ```
 
-Run `just check`. `app/src/db/schema.rs` now has `pub struct Project` and
-`pub enum ProjectStatus`, with docs taken from the SQL comments.
+`just check` now generates `pub struct Project` and `pub enum ProjectStatus` in
+`app/src/db/schema.rs`, with docs taken from the SQL comments. (It reports a
+compile error until step 5 replaces the placeholder `ping` procedure; that's
+expected.)
 
-**3. Types** in `types.rs` (example: `features/notes/types.rs`). Re-export the
-generated row types and write inputs and query-specific outputs by hand:
+**3. Types**, `app/src/features/projects/types.rs` (example:
+`app/src/features/notes/types.rs`). Re-export the generated row types; write
+inputs and query-specific outputs by hand:
 
+<!-- readme-test: write app/src/features/projects/types.rs -->
 ```rust
+//! API types for projects. Row types come from Postgres (`crate::db`).
+
 pub use crate::db::{Project, ProjectStatus};
 
 use serde::{Deserialize, Serialize};
@@ -344,6 +364,7 @@ use ts_rs::TS;
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectInput {
     pub name: String,
+    /// Defaults to `active`.
     #[serde(default)]
     #[ts(optional)]
     pub status: Option<ProjectStatus>,
@@ -356,13 +377,23 @@ pub struct ListProjectsOutput {
 }
 ```
 
-**4. SQL** in `db.rs` (example: `features/notes/db.rs`), with
-`use sqlx::{PgExecutor, PgPool};` and `use super::types::*;`. Every query uses
-`sqlx::query!` or `query_as!`, which are checked against the real schema at
-compile time:
+**4. SQL**, `app/src/features/projects/db.rs` (example:
+`app/src/features/notes/db.rs`). Every query uses `sqlx::query!` or
+`query_as!`, which are checked against the real schema at compile time:
 
+<!-- readme-test: write app/src/features/projects/db.rs -->
 ```rust
-pub async fn insert<'e>(db: impl PgExecutor<'e>, name: &str, status: ProjectStatus) -> sqlx::Result<Project> {
+//! All SQL for projects.
+
+use sqlx::{PgExecutor, PgPool};
+
+use super::types::*;
+
+pub async fn insert<'e>(
+    db: impl PgExecutor<'e>,
+    name: &str,
+    status: ProjectStatus,
+) -> sqlx::Result<Project> {
     sqlx::query_as!(
         Project,
         r#"INSERT INTO projects (name, status) VALUES ($1, $2)
@@ -385,13 +416,22 @@ pub async fn list(db: &PgPool) -> sqlx::Result<Vec<Project>> {
 }
 ```
 
-**5. Procedures** in `procedures.rs` (example: `features/notes/procedures.rs`).
-The scaffold already imports `Ctx`, `RpcResult`, the types and `AppState`; add
-`use super::db;`:
+**5. Procedures**, `app/src/features/projects/procedures.rs` (example:
+`app/src/features/notes/procedures.rs`):
 
+<!-- readme-test: write app/src/features/projects/procedures.rs -->
 ```rust
+//! RPC handlers for projects.
+
+use northstack::{Ctx, RpcResult};
+
+use super::db;
+use super::types::*;
+use crate::AppState;
+
 pub async fn list(ctx: Ctx<AppState>, _input: ()) -> RpcResult<ListProjectsOutput> {
-    Ok(ListProjectsOutput { projects: db::list(&ctx.state.db).await? })
+    let projects = db::list(&ctx.state.db).await?;
+    Ok(ListProjectsOutput { projects })
 }
 
 pub async fn create(ctx: Ctx<AppState>, input: CreateProjectInput) -> RpcResult<Project> {
@@ -402,26 +442,51 @@ pub async fn create(ctx: Ctx<AppState>, input: CreateProjectInput) -> RpcResult<
 }
 ```
 
-**6. Register** in `mod.rs` (example: `features/notes/mod.rs`):
+**6. Register**, `app/src/features/projects/mod.rs` (example:
+`app/src/features/notes/mod.rs`):
 
+<!-- readme-test: write app/src/features/projects/mod.rs -->
 ```rust
+//! Projects.
+
+mod db;
+mod jobs;
+mod procedures;
+pub mod types;
+
+use crate::AppState;
+use northstack::{Cron, Jobs, Rpc};
+
 pub fn rpc() -> Rpc<AppState> {
     Rpc::new()
         .query("projects.list", procedures::list)
         .mutation("projects.create", procedures::create)
 }
+
+pub fn jobs() -> Jobs<AppState> {
+    Jobs::new()
+}
+
+pub fn cron() -> Cron {
+    Cron::new()
+}
 ```
 
-Run `just check`. `web/src/rpc/` now has `api.projects.create` and the
-`Project`, `ProjectStatus` and `CreateProjectInput` TypeScript types.
+Run `just check`. `web/src/rpc/` now has `api.projects.list`,
+`api.projects.create` and the `Project`, `ProjectStatus`, `CreateProjectInput`
+and `ListProjectsOutput` TypeScript types.
 
-**7. Page** in `web/src/routes/projects.tsx` (example: `web/src/routes/index.tsx`):
+**7. Page**, `web/src/routes/projects.tsx` (example: `web/src/routes/index.tsx`).
+The file name is the URL: this page is `/projects`.
 
+<!-- readme-test: write web/src/routes/projects.tsx -->
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { api } from "../rpc";
 
 export const Route = createFileRoute("/projects")({
+  // Load before rendering, so the page never shows a spinner.
   loader: ({ context: { queryClient } }) => api.projects.list.ensureData(queryClient, null),
   component: Projects,
 });
@@ -429,12 +494,91 @@ export const Route = createFileRoute("/projects")({
 function Projects() {
   const { projects } = api.projects.list.useSuspenseQuery(null);
   const create = api.projects.create.useMutation({ invalidates: ["projects"] });
-  // render projects; call create.mutate({ name }) from a form
+  const [name, setName] = useState("");
+
+  return (
+    <>
+      <h1>Projects</h1>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          create.mutate({ name }, { onSuccess: () => setName("") });
+        }}
+      >
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+        <button disabled={create.isPending}>Add</button>
+        {create.error && <p className="error">{create.error.message}</p>}
+      </form>
+      <ul>
+        {projects.map((p) => (
+          <li key={p.id}>
+            {p.name} · {p.status}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
 }
 ```
 
-**8. Tests** in `app/tests/projects.rs` (example: `app/tests/notes.rs`), then
-`just verify`.
+**8. Tests**, `app/tests/projects.rs` (example: `app/tests/notes.rs`):
+
+<!-- readme-test: write app/tests/projects.rs -->
+```rust
+//! Integration tests for projects, through the real HTTP router.
+
+use std::time::Duration;
+
+use app::features::projects::types::*;
+use app::{AppState, MIGRATOR};
+use northstack::ErrorCode;
+use northstack::testing::Client;
+use serde_json::json;
+use sqlx::PgPool;
+
+async fn setup(pool: &PgPool) -> Client {
+    northstack::migrate(pool, &MIGRATOR).await.unwrap();
+    let router = app::build().router(
+        AppState::new(pool.clone()),
+        pool.clone(),
+        Duration::from_secs(30),
+    );
+    Client::new(router)
+}
+
+#[sqlx::test(migrations = false)]
+async fn create_and_list(pool: PgPool) {
+    let client = setup(&pool).await;
+    let p: Project = client
+        .call("projects.create", &json!({ "name": "  Apollo  " }))
+        .await
+        .unwrap();
+    assert_eq!(p.name, "Apollo");
+    assert_eq!(p.status, ProjectStatus::Active);
+
+    let out: ListProjectsOutput = client.call("projects.list", &()).await.unwrap();
+    assert_eq!(out.projects.len(), 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn rejects_empty_name(pool: PgPool) {
+    let client = setup(&pool).await;
+    let err = client
+        .call::<_, Project>("projects.create", &json!({ "name": " " }))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::BadRequest);
+}
+```
+
+**9. Finish.**
+
+<!-- readme-test: run -->
+```sh
+just verify
+```
+
+When it passes, commit everything, including the generated files.
 
 ## Backend reference
 
@@ -702,28 +846,30 @@ concurrent users). When the database is the bottleneck, both are equal.
 
 **CI** (`.github/workflows/ci.yml`) runs `just ci` against a fresh Postgres:
 every generated file must be up to date, and format, lint, tests and the
-frontend build must pass.
+frontend build must pass. Then it runs `just readme-test`: starting from
+`just remove-example`, it follows [Building a
+feature](#building-a-feature-end-to-end) exactly as written and runs `just
+verify` on the result, so the guide can't drift from the framework.
 
 ## Starting your own app
 
-The notes feature is an example. To replace it with your own app:
+The notes feature is an example. To start from an empty app:
 
-1. Delete the example backend: `app/src/features/notes/`, `app/tests/notes.rs`,
-   and the `pub mod notes;` line in `app/src/features/mod.rs`. In
-   `app/src/lib.rs`, remove the three `features::notes::...` lines from `build()`
-   (keep `.migrations`, `.frontend` and the `// northstack:features` marker).
-2. Delete the example migrations in `app/migrations/` (only in a new project
-   that has never been deployed; otherwise add a migration that drops the
-   tables).
-3. Delete the example pages: `web/src/routes/notes.$noteId.tsx` and
-   `web/src/components/priority.tsx`. Rewrite `web/src/routes/index.tsx` and
-   `about.tsx`, and the links in `__root.tsx`.
-4. `just db-reset`, then `just check`. Generated files are rewritten for the
-   empty app.
-5. Add your features with `just new-feature <name>` and follow
-   [Building a feature](#building-a-feature-end-to-end).
-6. Rename the project in `README.md` and `Cargo.toml` if you like. Keep
-   `crates/northstack` as it is.
+```sh
+just remove-example
+```
+
+It deletes the notes feature, its tests, migrations, pages and component, gives
+you a minimal home page, resets the dev database, and runs `just check`, which
+rewrites every generated file for the empty app. It refuses to run with
+uncommitted changes (`--force` skips that), so `git` can always undo it.
+
+Then add your features with `just new-feature <name>` and follow [Building a
+feature](#building-a-feature-end-to-end). Rename the project in `README.md` and
+`Cargo.toml` if you like; keep `crates/northstack` as it is.
+
+In a project that's already deployed, don't delete applied migrations: remove
+the code, and add a migration that drops the example tables.
 
 ## Rules
 

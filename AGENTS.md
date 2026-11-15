@@ -48,4 +48,5 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 | Add a page | File in `web/src/routes/`; load data in `loader`, read with `useSuspenseQuery` |
 | Run work later | A `Job` in `jobs.rs`; schedule it with `Cron` if it's periodic |
 | Test it | `app/tests/<feature>.rs` with `northstack::testing::Client` |
-| Change the framework | `crates/northstack`; add a test for every behavior change |
+| Start from an empty app | `just remove-example` |
+| Change the framework or README | Add a test for every behavior change; run `just readme-test` |
