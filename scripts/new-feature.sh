@@ -73,6 +73,37 @@ cat > "$dir/jobs.rs" <<RS
 //! Background jobs for ${name}. Handlers must be idempotent.
 RS
 
+# A passing integration test to grow from (more patterns: app/tests/notes.rs).
+cat > "$root/app/tests/${name}.rs" <<RS
+//! Integration tests for ${name}, through the real HTTP router.
+//! Each test gets a fresh database from \`#[sqlx::test]\`. More patterns:
+//! app/tests/notes.rs (errors, jobs, cron).
+
+use std::time::Duration;
+
+use app::features::${name}::types::*;
+use app::{AppState, MIGRATOR};
+use northstack::testing::Client;
+use sqlx::PgPool;
+
+async fn setup(pool: &PgPool) -> Client {
+    northstack::migrate(pool, &MIGRATOR).await.unwrap();
+    let router = app::build().router(
+        AppState::new(pool.clone()),
+        pool.clone(),
+        Duration::from_secs(30),
+    );
+    Client::new(router)
+}
+
+#[sqlx::test(migrations = false)]
+async fn ping(pool: PgPool) {
+    let client = setup(&pool).await;
+    let out: ${type_prefix}Ping = client.call("${prefix}.ping", &()).await.unwrap();
+    assert!(out.ok);
+}
+RS
+
 # Register the module and wire it into build().
 echo "pub mod ${name};" >> "$root/app/src/features/mod.rs"
 python3 - "$root/app/src/lib.rs" "$name" <<'PY'
@@ -88,5 +119,5 @@ s = s.replace(marker, add + marker, 1)
 open(path, "w").write(s)
 PY
 
-echo "created app/src/features/${name}; procedure ${prefix}.ping registered"
-echo "next: add types, a migration, queries and procedures, then loop on 'just check' and finish with 'just verify'"
+echo "created app/src/features/${name} and app/tests/${name}.rs; procedure ${prefix}.ping registered"
+echo "next: README.md -> 'Building a feature, end to end'. Loop on 'just check', finish with 'just verify'."

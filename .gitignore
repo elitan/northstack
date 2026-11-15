@@ -3,3 +3,4 @@
 /web/dist
 .env
 /.dev
+/web/tsconfig.tsbuildinfo
