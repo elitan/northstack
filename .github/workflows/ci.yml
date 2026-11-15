@@ -31,3 +31,12 @@ jobs:
       # The README is the product: run its walkthrough exactly as written,
       # starting from `just remove-example`, in a temporary copy.
       - run: just readme-test
+      # Browser smoke tests: the real binary (frontend embedded) in headless Chromium.
+      - run: cd web && bunx playwright install --with-deps chromium
+      - run: just e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: web/test-results/
+          if-no-files-found: ignore

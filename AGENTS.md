@@ -26,6 +26,7 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 - Read failures literally. Each one ends with a "how to fix" line.
 - `just logs` shows runtime warnings and errors since the api last started.
 - A change is done when `just verify` passes and generated files are committed.
+  If you changed pages, also run `just e2e` (browser smoke tests; CI runs them).
 
 ## Never
 
@@ -49,5 +50,6 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 | Add a page | `web/app/<path>/page.tsx` (folders are URLs); data with `api.x.y.useQuery(input)` |
 | Run work later | A `Job` in `jobs.rs`; schedule it with `Cron` if it's periodic |
 | Test it | `server/tests/<feature>.rs` with `northstack::testing::Client` |
+| Test a user flow in the browser | `web/e2e/<flow>.spec.ts` (Playwright); run `just e2e` |
 | Start from an empty app | `just remove-example` |
 | Change the framework or README | Add a test for every behavior change; run `just readme-test` |

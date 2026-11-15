@@ -282,6 +282,7 @@ web/                      YOUR FRONTEND (the notes pages here are an example)
     notes/[id]/page.tsx   /notes/:id
     not-found.tsx         404 page; error.tsx and loading.tsx: error and loading states
     components/           Shared components (any file that isn't page/layout is just code)
+  e2e/                    Browser smoke tests (Playwright), run by `just e2e`
   northstack/             GENERATED: `api` client, types and the router. Never edit.
   index.html              Loads northstack/main.tsx
 
@@ -291,6 +292,7 @@ scripts/dev.sh            Local environment: start, stop, status, reload, logs
 scripts/new-feature.sh    Scaffolds a feature folder and registers it
 scripts/remove-example.sh Deletes the example app (just remove-example)
 scripts/readme_test.py    Runs the README walkthrough as written (just readme-test)
+scripts/e2e.sh            Browser smoke tests against the real binary (just e2e)
 compose.yaml              Local Postgres for development
 .sqlx/                    GENERATED offline query cache (lets builds run without a DB)
 Dockerfile, justfile, .github/workflows/ci.yml
@@ -385,6 +387,7 @@ All commands:
 | `just new-feature <name>` | Scaffold `server/src/features/<name>/` and register it |
 | `just db-reset` | Drop, recreate and migrate the dev database (destroys data) |
 | `just remove-example` | Delete the example app and start from an empty one |
+| `just e2e` | Browser smoke tests: build the binary, start it with its own database, run `web/e2e/` in headless Chromium (CI runs it) |
 | `just readme-test` | Prove this README is true: run the feature walkthrough as written (CI runs it) |
 | `just build` | Release binary with the frontend embedded: `target/release/app` |
 | `just fmt` | Format Rust code |
@@ -888,6 +891,13 @@ of these. `just check` names any unsupported column.
   enqueues one slot.
 - `just verify` runs every test. The framework's own tests are in
   `crates/northstack/tests`.
+- **Browser smoke tests** go in `web/e2e/*.spec.ts` (Playwright). `just e2e`
+  builds the frontend into the binary, starts it on :3100 with its own database
+  (`<your db>_e2e`, reset each run) and runs them in headless Chromium; CI runs
+  it too. Keep them few: one test per important user flow, using labels and
+  roles (`page.getByLabel("Title")`), not CSS classes. `app.spec.ts` checks any
+  app (loads without console errors, unknown URLs 404); `notes.spec.ts` walks
+  through the example. `just e2e notes` runs only matching files.
 
 ## Running in production
 

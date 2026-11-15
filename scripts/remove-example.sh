@@ -11,6 +11,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Homebrew's rustup is keg-only; find it even if it isn't on PATH.
+if ! command -v cargo >/dev/null && [[ -x /opt/homebrew/opt/rustup/bin/cargo ]]; then
+  export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
+fi
+
 FORCE=0
 [[ ${1:-} == --force ]] && FORCE=1
 
@@ -31,7 +36,7 @@ sed -i.bak '/^pub mod notes;$/d' server/src/features/mod.rs && rm server/src/fea
 sed -i.bak '/features::notes::/d' server/src/lib.rs && rm server/src/lib.rs.bak
 
 # Frontend: the example pages and component.
-rm -rf web/app/notes web/app/components
+rm -rf web/app/notes web/app/components web/e2e/notes.spec.ts
 cat > web/app/page.tsx <<'TSX'
 // "/": the home page.
 export default function Home() {

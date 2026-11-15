@@ -64,3 +64,8 @@ build:
 # Format Rust code.
 fmt:
     cargo fmt --all
+
+# Browser smoke tests: builds the binary, starts it with its own database
+# (<your db>_e2e) and runs web/e2e/*.spec.ts in headless Chromium. CI runs it.
+e2e *args:
+    @./scripts/e2e.sh {{args}}
