@@ -13,8 +13,10 @@
 
 ---
 
-northstack is a small framework for apps that AI agents write and maintain.
-You describe what you want; the agent builds it in a codebase where there's one
+northstack is an open-source, full-stack web framework: a **Rust** backend
+(axum, sqlx), a **React** frontend with Next.js-style folder routing, and
+**PostgreSQL**, shipped as **one small binary**. It's built for apps that AI
+coding agents (Claude Code, Codex, Cursor) write and maintain: there's one
 obvious way to do everything, and the compiler catches mistakes before you ever
 see them.
 
@@ -124,6 +126,32 @@ northstack wins when the server itself does the work. Details in
   throughput of a comparable Next.js app ([see above](#compared-to-nextjs)).
 - **Made for agents.** One command checks everything and prints only what's
   wrong. The guide below is tested in CI, so it always matches the code.
+
+## FAQ
+
+**Is northstack a Next.js alternative?** For apps behind a login (dashboards,
+internal tools, SaaS), yes: it has Next.js-style pages (`page.tsx`, `layout.tsx`,
+`[id]` folders) but a Rust backend, typed end to end, in one binary that uses a
+few MB of memory.
+
+**Does it do server-side rendering (SSR)?** No. Pages render in the browser,
+which keeps it simple: no JavaScript runs on the server. For public pages that
+need SEO, a static site or pre-rendering is the better fit.
+
+**Which database does it use?** PostgreSQL only. Types for every table are
+generated from the database, and every query is checked against it at compile
+time.
+
+**Can I use npm packages?** Yes, any package that runs in the browser. Server
+code is Rust, so server-side work uses Rust crates.
+
+**Do I need to know Rust?** It helps, but it's designed so an AI agent writes
+most of the code: one pattern per task, a written guide, and checks that say
+exactly what's wrong and how to fix it.
+
+**How does it compare on cost?** On the smallest cloud container it uses a
+fraction of the memory of a comparable Next.js app (see the
+[comparison](#compared-to-nextjs)), which matters when you run many small apps.
 
 ## Try it
 
