@@ -56,7 +56,7 @@ def fail(name: str, output: str, hint: str, keep: Path | None = None) -> None:
 def check_paths() -> None:
     t0 = time.time()
     missing = []
-    prefixes = ("app/", "web/", "crates/", "scripts/", ".github/", ".sqlx/")
+    prefixes = ("server/", "web/", "crates/", "scripts/", ".github/", ".sqlx/")
     for doc in DOCS:
         text = doc.read_text()
         # Paths created by the walkthrough itself, or at build/run time.
@@ -67,7 +67,8 @@ def check_paths() -> None:
             p = c.rstrip(".,:;")
             if not (p.startswith(prefixes) or p.endswith(".md")) or "://" in p:
                 continue
-            if any(ch in p for ch in "<>*{}") or p in created or "/projects" in p:
+            # <name>, globs and (group) folders are illustrative, not real paths.
+            if any(ch in p for ch in "<>*{}()") or p in created or "/projects" in p:
                 continue
             if p.startswith(("web/dist", ".dev")) or p.endswith(".gen.ts.bak"):
                 continue

@@ -16,10 +16,10 @@ WORKDIR /src
 ENV SQLX_OFFLINE=true
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
-COPY app app
+COPY server server
 COPY .sqlx .sqlx
 COPY --from=web /src/web/dist web/dist
-RUN cargo build --release -p app && strip target/release/app
+RUN cargo build --release -p server && strip target/release/app
 
 # --- runtime ----------------------------------------------------------------
 # Distroless: no shell, no package manager, runs as non-root.

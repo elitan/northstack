@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/northstack", "app"]
+members = ["crates/northstack", "server"]
 
 [profile.release]
 lto = "thin"

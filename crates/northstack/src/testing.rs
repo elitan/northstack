@@ -6,8 +6,8 @@
 //! ```ignore
 //! #[sqlx::test(migrations = false)]
 //! async fn creates_note(pool: PgPool) {
-//!     northstack::migrate(&pool, &app::MIGRATOR).await.unwrap();
-//!     let client = northstack::testing::Client::new(app::build().router_for_test(state, pool));
+//!     northstack::migrate(&pool, &server::MIGRATOR).await.unwrap();
+//!     let client = northstack::testing::Client::new(server::build().router_for_test(state, pool));
 //!     ...
 //! }
 //! ```

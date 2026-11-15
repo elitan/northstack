@@ -10,7 +10,7 @@ pub use state::AppState;
 use northstack::App;
 use sqlx::migrate::Migrator;
 
-/// App migrations from `app/migrations`.
+/// App migrations from `server/migrations`.
 pub static MIGRATOR: Migrator = sqlx::migrate!();
 
 /// The frontend, built by Vite into `web/dist` and embedded in release builds.

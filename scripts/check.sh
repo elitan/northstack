@@ -60,29 +60,29 @@ CI_FLAG=""
 [[ $MODE == "ci" ]] && CI_FLAG="--check"
 
 northstack() { cargo run -q -p northstack --bin northstack -- "$@"; }
-app() { cargo run -q -p app -- "$@"; }
+app() { cargo run -q -p server -- "$@"; }
 
 step migrate \
   "Fix the migration SQL. Never edit a migration that was already applied; add a new one. In development, 'just db-reset' starts over." \
   northstack migrate
 
 step gen-db \
-  "Rust types are generated from Postgres into app/src/db/schema.rs. In CI: run 'just check' locally and commit the file. For unsupported types, change the column type." \
+  "Rust types are generated from Postgres into server/src/db/schema.rs. In CI: run 'just check' locally and commit the file. For unsupported types, change the column type." \
   northstack gen-db $CI_FLAG
 
 step compile \
-  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in app/src/db/schema.rs. Custom enum columns need 'col AS \"col: EnumType\"' in SELECT and 'value as EnumType' for parameters." \
-  cargo build -q -p app --bin app --message-format short
+  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in server/src/db/schema.rs. Custom enum columns need 'col AS \"col: EnumType\"' in SELECT and 'value as EnumType' for parameters." \
+  cargo build -q -p server --bin app --message-format short
 
 step gen-ts \
-  "TypeScript types are generated from Rust into web/src/rpc. In CI: run 'just check' locally and commit the changes." \
+  "TypeScript types are generated from Rust into web/northstack. In CI: run 'just check' locally and commit the changes." \
   app gen-ts $CI_FLAG
 
 typecheck() {
-  (cd web && bunx tsr generate >/dev/null 2>&1 && bunx tsc -b --pretty false)
+  (cd web && bunx tsc -b --pretty false)
 }
 step typecheck \
-  "The frontend no longer matches the API or routes. Current API types: web/src/rpc/types/ and web/src/rpc/procedures.ts. Update the React code; never edit generated files." \
+  "The frontend no longer matches the API or routes. Current API types: web/northstack/types/ and web/northstack/procedures.ts. Update the React code; never edit generated files." \
   typecheck
 
 if [[ $RELOAD == 1 && -f .dev/active ]]; then
@@ -98,8 +98,6 @@ fi
 
 if [[ $MODE == "ci" ]]; then
   step format "Run 'just fmt' and commit." cargo fmt --all --check
-  routes_clean() { git diff --quiet -- web/src/routeTree.gen.ts; }
-  step routes "web/src/routeTree.gen.ts is out of date. Run 'just check' and commit." routes_clean
 else
   step format "rustfmt failed; fix the syntax error above." cargo fmt --all
 fi

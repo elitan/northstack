@@ -1,117 +1,90 @@
-import {
-  queryOptions as tanstackQueryOptions,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useSuspenseQuery,
-  type QueryClient,
-  type QueryKey,
-  type UseMutationOptions,
-  type UseQueryOptions,
-  type UseSuspenseQueryOptions,
-} from "@tanstack/react-query";
+import { QueryClient, useMutation as useTanstackMutation, useSuspenseQuery } from "@tanstack/react-query";
 import { call, type Input, type MutationName, type Output, type QueryName, RpcClientError } from "./client";
-import type { Namespace } from "./procedures";
 
-/** Something to invalidate: a whole namespace ("notes") or one query ("notes.list"). */
-export type InvalidateTarget = Namespace | QueryName;
+/** One cache for the whole app. */
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10_000,
+      // Don't retry errors the server meant (validation, not found, auth).
+      retry: (count, error) => count < 2 && (!(error instanceof RpcClientError) || error.code === "INTERNAL"),
+    },
+  },
+});
 
-type QueryOpts<K extends QueryName> = Omit<
-  UseQueryOptions<Output<K>, RpcClientError, Output<K>, QueryKey>,
-  "queryKey" | "queryFn"
->;
+/** Refetch every query on the page (after a change the page didn't make itself). */
+export function refresh(): Promise<void> {
+  return queryClient.invalidateQueries();
+}
 
-type SuspenseOpts<K extends QueryName> = Omit<
-  UseSuspenseQueryOptions<Output<K>, RpcClientError, Output<K>, QueryKey>,
-  "queryKey" | "queryFn"
->;
+type QueryOptions<K extends QueryName> = {
+  /** Poll: refetch every N ms (or decide from the current data; false stops). */
+  refetchInterval?: number | false | ((data: Output<K> | undefined) => number | false);
+};
 
 /**
- * Typed helpers for one query procedure. Generated into `api.ts`:
+ * Helpers for one query procedure, generated into `api`:
  *
  * ```ts
- * api.notes.list.useSuspenseQuery({ search })            // in components
- * queryClient.ensureQueryData(api.notes.list.queryOptions({ search }))  // in route loaders
- * api.notes.list.key()                                    // ["notes", "list"] for invalidation
+ * const notes = api.notes.list.useQuery({ search });   // the data, never undefined
  * ```
  */
 export function query<K extends QueryName>(name: K) {
   // `as string`: with no queries at all, K is `never` and has no methods.
   const path = (name as string).split(".");
-  const queryOptions = (input: Input<K>, options?: QueryOpts<K>) =>
-    tanstackQueryOptions<Output<K>, RpcClientError, Output<K>, QueryKey>({
-      queryKey: [...path, input ?? null],
-      queryFn: ({ signal }) => call(name, input, { signal }),
-      ...options,
-    });
   return {
     name,
-    /** Query key. Without input it matches every input (for invalidation). */
-    key: (input?: Input<K>): QueryKey => (input === undefined ? path : [...path, input ?? null]),
-    /** Call the procedure directly, outside React Query. */
-    call: (input: Input<K>, init?: { signal?: AbortSignal }) => call(name, input, init),
-    /** Options for `useQuery`, `queryClient.ensureQueryData`, `prefetchQuery`, ... */
-    queryOptions,
-    /** Fetch in a route loader so the component never shows a spinner. */
-    ensureData: (queryClient: QueryClient, input: Input<K>) => queryClient.ensureQueryData(queryOptions(input)),
-    useQuery: (input: Input<K>, options?: QueryOpts<K>) => useQuery(queryOptions(input, options)),
-    /** Preferred in route components: returns the data, never undefined. */
-    useSuspenseQuery: (input: Input<K>, options?: SuspenseOpts<K>) =>
-      useSuspenseQuery<Output<K>, RpcClientError, Output<K>, QueryKey>({
+    /**
+     * Read data in a page or component. Suspends until it's loaded (the
+     * page's loading.tsx shows meanwhile) and returns it, never undefined.
+     * Errors go to the page's error.tsx; NOT_FOUND shows not-found.tsx.
+     */
+    useQuery: (input: Input<K>, options?: QueryOptions<K>): Output<K> => {
+      const interval = options?.refetchInterval;
+      return useSuspenseQuery<Output<K>, RpcClientError>({
         queryKey: [...path, input ?? null],
         queryFn: ({ signal }) => call(name, input, { signal }),
-        ...options,
-      }).data,
+        refetchInterval: typeof interval === "function" ? (q) => interval(q.state.data) : interval,
+      }).data;
+    },
+    /** Call the procedure directly, outside React. */
+    call: (input: Input<K>) => call(name, input),
   };
 }
 
-type MutationOpts<K extends MutationName> = Omit<
-  UseMutationOptions<Output<K>, RpcClientError, Input<K>>,
-  "mutationFn"
-> & {
-  /** Queries to refetch after success, e.g. `["notes"]` or `["notes.list", "notes.stats"]`. */
-  invalidates?: InvalidateTarget[];
-};
-
 /**
- * Typed helpers for one mutation procedure. Generated into `api.ts`:
+ * Helpers for one mutation procedure, generated into `api`:
  *
  * ```ts
- * const create = api.notes.create.useMutation({ invalidates: ["notes"] });
- * create.mutate({ title });
+ * const create = api.notes.create.useMutation();
+ * create.mutate({ title });        // create.isPending, create.error, create.data
  * ```
+ *
+ * After a mutation succeeds, every query on the page refetches, so it shows
+ * fresh data without listing what changed. `onSuccess` runs first: navigate
+ * away there (e.g. after a delete) and the old page isn't refetched.
  */
 export function mutation<K extends MutationName>(name: K) {
   return {
     name,
-    call: (input: Input<K>) => call(name, input),
-    useMutation: (options?: MutationOpts<K>) => {
-      const queryClient = useQueryClient();
-      const { invalidates, onSuccess, ...rest } = options ?? {};
-      return useMutation<Output<K>, RpcClientError, Input<K>>({
+    useMutation: (options?: { onSuccess?: (data: Output<K>, input: Input<K>) => unknown }) =>
+      useTanstackMutation<Output<K>, RpcClientError, Input<K>>({
         mutationFn: (input) => call(name, input),
-        ...rest,
-        onSuccess: async (...args) => {
-          await invalidate(queryClient, ...(invalidates ?? []));
-          return onSuccess?.(...args);
+        onSuccess: async (data, input) => {
+          await options?.onSuccess?.(data, input);
+          await queryClient.invalidateQueries();
         },
-      });
+      }),
+    /** Call it directly (e.g. from an event handler), then refetch queries. */
+    call: async (input: Input<K>): Promise<Output<K>> => {
+      const out = await call(name, input);
+      await queryClient.invalidateQueries();
+      return out;
     },
   };
 }
 
-/** Refetch everything under the given namespaces / queries. */
-export function invalidate(queryClient: QueryClient, ...targets: InvalidateTarget[]) {
-  return Promise.all(targets.map((t) => queryClient.invalidateQueries({ queryKey: (t as string).split(".") })));
-}
-
-/** Hook form of `invalidate`. */
-export function useInvalidate() {
-  const queryClient = useQueryClient();
-  return (...targets: InvalidateTarget[]) => invalidate(queryClient, ...targets);
-}
-
-/** True if the error is an RPC error with the given code, e.g. `isRpcError(e, "NOT_FOUND")`. */
+/** True if the error is an RPC error with the given code, e.g. `isRpcError(e, "CONFLICT")`. */
 export function isRpcError(error: unknown, code?: RpcClientError["code"]): error is RpcClientError {
   return error instanceof RpcClientError && (code === undefined || error.code === code);
 }

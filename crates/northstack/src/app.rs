@@ -129,7 +129,7 @@ impl<S: Clone + Send + Sync + 'static> Default for App<S> {
             migrator: None,
             assets: None,
             routes: None,
-            ts_out: PathBuf::from("web/src/rpc"),
+            ts_out: PathBuf::from("web/northstack"),
         }
     }
 }
@@ -170,7 +170,7 @@ impl<S: Clone + Send + Sync + 'static> App<S> {
         self
     }
     /// Where `gen-ts` writes the TypeScript client (relative to the working
-    /// directory). Default: `web/src/rpc`.
+    /// directory). Default: `web/northstack`.
     pub fn ts_out(mut self, dir: impl Into<PathBuf>) -> Self {
         self.ts_out = dir.into();
         self

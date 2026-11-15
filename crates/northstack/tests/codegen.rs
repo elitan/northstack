@@ -27,7 +27,7 @@ fn generates_nested_api_and_namespaces() {
     assert!(api.contains("      send: mutation(\"billing.invoices.send\"),"));
     assert!(api.contains("  me: query(\"me\"),"));
     let procs = std::fs::read_to_string(dir.join("procedures.ts")).unwrap();
-    assert!(procs.contains("| \"billing\"") && procs.contains("| \"billing.invoices\""));
+    assert!(procs.contains("\"billing.invoices.list\": { kind: \"query\""));
     std::fs::remove_dir_all(dir).unwrap();
 }
 

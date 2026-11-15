@@ -33,12 +33,12 @@ ok   migrate    0s
 ok   gen-db     0s
 FAIL compile    0s
 
-app/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-app/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-app/src/features/notes/db.rs:57:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-app/src/features/notes/db.rs:82:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:57:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:82:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
 
-how to fix: Fix the errors above. [...] the current schema is in app/src/db/schema.rs.
+how to fix: Fix the errors above. [...] the current schema is in server/src/db/schema.rs.
 ```
 
 Fix the query, run it again, and the new field is in the TypeScript types the
@@ -49,8 +49,9 @@ the exact component that doesn't handle it yet. Nothing drifts silently.
 
 |  |  |
 |---|---|
+| **Pages like Next.js** | A folder with a `page.tsx` is a URL; `[id]` is a parameter; `layout.tsx` wraps what's below. No router config. |
 | **Types end to end** | Postgres → Rust → TypeScript, all generated. SQL is checked against the real database at compile time. |
-| **Typed RPC** | Write `async fn` in Rust; call `api.projects.list.useSuspenseQuery()` in React. No REST routes, no schemas to keep in sync. |
+| **Typed RPC** | Write `async fn` in Rust; call `api.projects.list.useQuery()` in React. No REST routes, no schemas to keep in sync. |
 | **Background jobs and cron** | A Postgres job queue in the same binary: transactional enqueue, retries, safe across any number of replicas. |
 | **One binary** | Frontend embedded, migrations run at startup. Deploy one container, or run it as `serve` and `worker` to scale them separately. |
 | **Small and fast** | About 2 MiB of memory idle and 8 MiB under load. Several times the throughput of an equivalent Next.js app on the same 0.25 vCPU ([measured](#running-in-production)). |
@@ -68,7 +69,8 @@ pub async fn create(ctx: Ctx<AppState>, input: CreateProjectInput) -> RpcResult<
 
 ```tsx
 // React: the same procedure, typed from the Rust above
-const create = api.projects.create.useMutation({ invalidates: ["projects"] });
+const projects = api.projects.list.useQuery(null);  // typed: Project[]
+const create = api.projects.create.useMutation();     // the list refetches after it succeeds
 create.mutate({ name: "Apollo" });   // create.mutate({ nme: "Apollo" }) won't compile
 ```
 
@@ -85,7 +87,7 @@ just dev        # Postgres, api and frontend, ready at http://localhost:5173
 Then point your agent at the repo. It reads [AGENTS.md](AGENTS.md), which sends
 it to [the guide](#the-guide) below.
 
-The code in `app/` and `web/` is **an example** (a small notes app) that shows
+The code in `server/` and `web/` is **an example** (a small notes app) that shows
 every pattern once. You replace it with your own features; the framework in
 `crates/northstack` stays.
 
@@ -96,7 +98,7 @@ every pattern once. You replace it with your own features; the framework in
 Everything an agent (or a person) needs to set up the project, build features,
 test them and ship, in one place. Read it top to bottom once.
 
-**The code under `app/` and `web/` is only an example** (a small "notes" app).
+**The code under `server/` and `web/` is only an example** (a small "notes" app).
 It exists to show every pattern once: a table, an enum, queries, procedures, a
 background job, a cron entry, pages, URL state, mutations, and tests. Copy its
 patterns, then replace it with your own features ([Starting your own
@@ -134,21 +136,21 @@ app](#starting-your-own-app)). The framework itself lives in `crates/northstack`
   the same binary serves HTTP, runs background jobs and fires cron.
 
 Stack: Rust (axum, sqlx with compile-time-checked SQL, Postgres) on the server;
-React, TypeScript, TanStack Router and TanStack Query in the browser, built with
-Vite and Bun. There is no server-side rendering and no Node at runtime.
+React and TypeScript in the browser, built with Vite and Bun, with a small
+Next.js-style folder router. There is no server-side rendering and no Node at runtime.
 
 ## How it fits together
 
 Types flow one way. Every arrow is a generator, run by `just check`:
 
 ```
-app/migrations/*.sql ──migrate──▶ Postgres ──gen-db──▶ app/src/db/schema.rs (row structs, enums)
+server/migrations/*.sql ──migrate──▶ Postgres ──gen-db──▶ server/src/db/schema.rs (row structs, enums)
                                                               │
                                      your Rust: types.rs, db.rs, procedures.rs
                                                               │
-                                     ──gen-ts──▶ web/src/rpc/ (TypeScript types + `api` client)
+                                     ──gen-ts──▶ web/northstack/ (TypeScript types, `api` client, router)
                                                               │
-                                     your React: web/src/routes/*.tsx
+                                     your React: web/app/**/page.tsx
 ```
 
 A request at runtime:
@@ -195,11 +197,14 @@ app/                      YOUR BACKEND (the notes code here is an example)
   tests/<name>.rs         Integration tests through the real HTTP router
 
 web/                      YOUR FRONTEND (the notes pages here are an example)
-  src/main.tsx            QueryClient + router setup (rarely changed)
-  src/routes/             Pages. One file = one URL. __root.tsx is the layout.
-  src/components/         Shared components. states.tsx = loading/error/not-found.
-  src/rpc/                GENERATED client (`api`) and types. Never edit.
-  src/routeTree.gen.ts    GENERATED route tree. Never edit.
+  app/                    Pages, like Next.js: folders are URLs (see "Frontend reference")
+    layout.tsx            Wraps every page (nav, styles)
+    page.tsx              /
+    notes/[id]/page.tsx   /notes/:id
+    not-found.tsx         404 page; error.tsx and loading.tsx: error and loading states
+    components/           Shared components (any file that isn't page/layout is just code)
+  northstack/             GENERATED: `api` client, types and the router. Never edit.
+  index.html              Loads northstack/main.tsx
 
 AGENTS.md                 Entry point for coding agents: the loop and the hard rules
 scripts/check.sh          The one check command (see below)
@@ -264,10 +269,10 @@ result is ready, and logs go to files instead of a terminal stream.
 ```text
 $ just check
 ok   migrate    0s     apply migrations to the dev database
-ok   gen-db     0s     Postgres -> app/src/db/schema.rs
+ok   gen-db     0s     Postgres -> server/src/db/schema.rs
 ok   compile    4s     Rust, with every SQL query checked against Postgres
-ok   gen-ts     0s     Rust -> web/src/rpc/
-ok   typecheck  1s     React against the generated types and routes
+ok   gen-ts     0s     Rust -> web/northstack/
+ok   typecheck  1s     React against the generated types
 ok   reload     0s     restart the dev api (if running) and wait until ready
 
 all checks passed in 6s
@@ -279,11 +284,11 @@ after a migration adds `notes.pinned`:
 ```text
 FAIL compile    0s
 
-app/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-app/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
 ...
 how to fix: Fix the errors above. 'error returned from database' means a query doesn't match
-the schema; the current schema is in app/src/db/schema.rs. [...]
+the schema; the current schema is in server/src/db/schema.rs. [...]
 ```
 
 All commands:
@@ -297,8 +302,8 @@ All commands:
 | `just check` | The fast loop above, 2–8 s |
 | `just verify` | `check` + format, clippy (warnings are errors), all tests, `.sqlx` refresh, frontend build |
 | `just ci` | Like `verify`, but fails if generated files are stale instead of writing them |
-| `just migration <name>` | Create `app/migrations/<timestamp>_<name>.sql` |
-| `just new-feature <name>` | Scaffold `app/src/features/<name>/` and register it |
+| `just migration <name>` | Create `server/migrations/<timestamp>_<name>.sql` |
+| `just new-feature <name>` | Scaffold `server/src/features/<name>/` and register it |
 | `just db-reset` | Drop, recreate and migrate the dev database (destroys data) |
 | `just remove-example` | Delete the example app and start from an empty one |
 | `just readme-test` | Prove this README is true: run the feature walkthrough as written (CI runs it) |
@@ -321,13 +326,13 @@ always matches the framework.
 just new-feature projects
 ```
 
-This creates `app/src/features/projects/` with the five files, registers the
-feature in `app/src/lib.rs` and `app/src/features/mod.rs`, and adds a
+This creates `server/src/features/projects/` with the five files, registers the
+feature in `server/src/lib.rs` and `server/src/features/mod.rs`, and adds a
 `projects.ping` procedure and a test so it compiles and passes immediately. The
 next steps replace those placeholder files.
 
 **2. Schema.** `just migration create_projects` prints the new file's path.
-Write the SQL there (example: `app/migrations/20261108000001_notes.sql`):
+Write the SQL there (example: `server/migrations/20261108000001_notes.sql`):
 
 <!-- readme-test: migration create_projects -->
 ```sql
@@ -343,15 +348,15 @@ COMMENT ON TABLE projects IS 'A project owned by a team.';
 ```
 
 `just check` now generates `pub struct Project` and `pub enum ProjectStatus` in
-`app/src/db/schema.rs`, with docs taken from the SQL comments. (It reports a
+`server/src/db/schema.rs`, with docs taken from the SQL comments. (It reports a
 compile error until step 5 replaces the placeholder `ping` procedure; that's
 expected.)
 
-**3. Types**, `app/src/features/projects/types.rs` (example:
-`app/src/features/notes/types.rs`). Re-export the generated row types; write
+**3. Types**, `server/src/features/projects/types.rs` (example:
+`server/src/features/notes/types.rs`). Re-export the generated row types; write
 inputs and query-specific outputs by hand:
 
-<!-- readme-test: write app/src/features/projects/types.rs -->
+<!-- readme-test: write server/src/features/projects/types.rs -->
 ```rust
 //! API types for projects. Row types come from Postgres (`crate::db`).
 
@@ -377,11 +382,11 @@ pub struct ListProjectsOutput {
 }
 ```
 
-**4. SQL**, `app/src/features/projects/db.rs` (example:
-`app/src/features/notes/db.rs`). Every query uses `sqlx::query!` or
+**4. SQL**, `server/src/features/projects/db.rs` (example:
+`server/src/features/notes/db.rs`). Every query uses `sqlx::query!` or
 `query_as!`, which are checked against the real schema at compile time:
 
-<!-- readme-test: write app/src/features/projects/db.rs -->
+<!-- readme-test: write server/src/features/projects/db.rs -->
 ```rust
 //! All SQL for projects.
 
@@ -416,10 +421,10 @@ pub async fn list(db: &PgPool) -> sqlx::Result<Vec<Project>> {
 }
 ```
 
-**5. Procedures**, `app/src/features/projects/procedures.rs` (example:
-`app/src/features/notes/procedures.rs`):
+**5. Procedures**, `server/src/features/projects/procedures.rs` (example:
+`server/src/features/notes/procedures.rs`):
 
-<!-- readme-test: write app/src/features/projects/procedures.rs -->
+<!-- readme-test: write server/src/features/projects/procedures.rs -->
 ```rust
 //! RPC handlers for projects.
 
@@ -442,10 +447,10 @@ pub async fn create(ctx: Ctx<AppState>, input: CreateProjectInput) -> RpcResult<
 }
 ```
 
-**6. Register**, `app/src/features/projects/mod.rs` (example:
-`app/src/features/notes/mod.rs`):
+**6. Register**, `server/src/features/projects/mod.rs` (example:
+`server/src/features/notes/mod.rs`):
 
-<!-- readme-test: write app/src/features/projects/mod.rs -->
+<!-- readme-test: write server/src/features/projects/mod.rs -->
 ```rust
 //! Projects.
 
@@ -472,32 +477,26 @@ pub fn cron() -> Cron {
 }
 ```
 
-Run `just check`. `web/src/rpc/` now has `api.projects.list`,
+Run `just check`. `web/northstack/` now has `api.projects.list`,
 `api.projects.create` and the `Project`, `ProjectStatus`, `CreateProjectInput`
 and `ListProjectsOutput` TypeScript types.
 
-**7. Page**, `web/src/routes/projects.tsx` (example: `web/src/routes/index.tsx`).
-The file name is the URL: this page is `/projects`.
+**7. Page**, `web/app/projects/page.tsx` (example: `web/app/page.tsx`). The
+folder is the URL: this page is `/projects`.
 
-<!-- readme-test: write web/src/routes/projects.tsx -->
+<!-- readme-test: write web/app/projects/page.tsx -->
 ```tsx
-import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { api } from "../rpc";
+import { api } from "northstack";
 
-export const Route = createFileRoute("/projects")({
-  // Load before rendering, so the page never shows a spinner.
-  loader: ({ context: { queryClient } }) => api.projects.list.ensureData(queryClient, null),
-  component: Projects,
-});
-
-function Projects() {
-  const { projects } = api.projects.list.useSuspenseQuery(null);
-  const create = api.projects.create.useMutation({ invalidates: ["projects"] });
+export default function ProjectsPage() {
+  const { projects } = api.projects.list.useQuery(null); // loaded before it renders
+  const create = api.projects.create.useMutation(); // the list refetches after success
   const [name, setName] = useState("");
 
   return (
     <>
+      <title>Projects</title>
       <h1>Projects</h1>
       <form
         onSubmit={(e) => {
@@ -521,16 +520,16 @@ function Projects() {
 }
 ```
 
-**8. Tests**, `app/tests/projects.rs` (example: `app/tests/notes.rs`):
+**8. Tests**, `server/tests/projects.rs` (example: `server/tests/notes.rs`):
 
-<!-- readme-test: write app/tests/projects.rs -->
+<!-- readme-test: write server/tests/projects.rs -->
 ```rust
 //! Integration tests for projects, through the real HTTP router.
 
 use std::time::Duration;
 
-use app::features::projects::types::*;
-use app::{AppState, MIGRATOR};
+use server::features::projects::types::*;
+use server::{AppState, MIGRATOR};
 use northstack::ErrorCode;
 use northstack::testing::Client;
 use serde_json::json;
@@ -538,7 +537,7 @@ use sqlx::PgPool;
 
 async fn setup(pool: &PgPool) -> Client {
     northstack::migrate(pool, &MIGRATOR).await.unwrap();
-    let router = app::build().router(
+    let router = server::build().router(
         AppState::new(pool.clone()),
         pool.clone(),
         Duration::from_secs(30),
@@ -623,9 +622,9 @@ violation becomes `CONFLICT`, anything else becomes `INTERNAL`. An
 
 ### AppState
 
-`app/src/state.rs` holds what every procedure and job needs (the pool, and later
+`server/src/state.rs` holds what every procedure and job needs (the pool, and later
 config or API clients). It must be cheap to `Clone`. It is built in
-`app/src/main.rs` from the connected pool.
+`server/src/main.rs` from the connected pool.
 
 ### Background jobs
 
@@ -674,72 +673,80 @@ exactly once across all replicas (no leader election needed).
 ### Other HTTP routes
 
 For endpoints that aren't RPC (webhooks, file downloads), add a plain axum
-router in `app/src/lib.rs`: `.routes(axum::Router::new().route("/webhooks/x", post(handler)))`.
+router in `server/src/lib.rs`: `.routes(axum::Router::new().route("/webhooks/x", post(handler)))`.
 Built-in routes: `POST /rpc/{name}`, `GET /healthz` (liveness), `GET /readyz`
 (database reachable). Everything else serves the embedded frontend, with
 `index.html` as the fallback for client-side routes.
 
 ## Frontend reference
 
-A client-rendered single-page app. All server data goes through the generated
-`api` object (`import { api } from "../rpc"`).
+A client-rendered React app. Everything comes from one import:
+`import { api, navigate, type Note } from "northstack"` (generated into
+`web/northstack/`).
 
-**Pages.** A file in `web/src/routes/` is a page: `index.tsx` → `/`,
-`about.tsx` → `/about`, `notes.$noteId.tsx` → `/notes/:noteId`. `__root.tsx`
-is the layout. Each exports `const Route = createFileRoute("/path")({...})`.
-Links and params are type-checked: `<Link to="/notes/$noteId" params={{ noteId }} />`.
+**Pages: folders are URLs**, like Next.js's app router:
 
-**Load in the loader, read with suspense.** Every page that shows server data
-prefetches in its `loader`, so it renders with data and never shows a spinner
-inside the page:
+| File | URL / role |
+|---|---|
+| `web/app/page.tsx` | `/` |
+| `web/app/about/page.tsx` | `/about` |
+| `web/app/notes/[id]/page.tsx` | `/notes/:id`, with `params.id` |
+| `web/app/(admin)/users/page.tsx` | `/users`: a `(group)` folder doesn't appear in the URL |
+| `web/app/layout.tsx` | Wraps every page below its folder; layouts nest |
+| `web/app/not-found.tsx` | Unknown URLs, `notFound()`, and `NOT_FOUND` errors from the API |
+| `web/app/error.tsx` | Any other error while a page renders (gets `{ error, retry }`) |
+| `web/app/loading.tsx` | Shown while a page's data loads |
+
+A page is a default export that gets `{ params, searchParams }`. Other files in
+`web/app/` (components, helpers) are ordinary modules. Set the browser title
+with `<title>` anywhere in the page.
 
 ```tsx
-export const Route = createFileRoute("/notes/$noteId")({
-  loader: ({ context: { queryClient }, params }) =>
-    api.notes.get.ensureData(queryClient, { id: params.noteId }),
-  component: NotePage,
-});
-function NotePage() {
-  const { noteId } = Route.useParams();
-  const note = api.notes.get.useSuspenseQuery({ id: noteId }); // never undefined
+// web/app/notes/[id]/page.tsx
+import { api, type PageProps } from "northstack";
+
+export default function NotePage({ params }: PageProps<{ id: string }>) {
+  const note = api.notes.get.useQuery({ id: params.id }); // never undefined
+  return (
+    <>
+      <title>{note.title}</title>
+      <h1>{note.title}</h1>
+    </>
+  );
 }
 ```
 
-Use `api.x.y.useQuery(input)` (not suspense) only for optional or on-demand data
-inside a page.
+**Data:**
 
-**The generated `api`:**
-
-| Call | Use |
+| Call | What it does |
 |---|---|
-| `api.ns.query.ensureData(queryClient, input)` | In loaders |
-| `api.ns.query.useSuspenseQuery(input, options?)` | In page components |
-| `api.ns.query.useQuery(input, options?)` | Optional / on-demand data |
-| `api.ns.query.queryOptions(input)` | When TanStack Query needs options directly |
-| `api.ns.mutation.useMutation({ invalidates, onSuccess, ... })` | Writes |
-| `api.ns.proc.call(input)` | Plain async call, outside React |
+| `api.ns.query.useQuery(input)` | Loads data; the page shows `loading.tsx` until it's there, then gets it (never undefined). Errors go to `error.tsx`, `NOT_FOUND` to `not-found.tsx`. |
+| `api.ns.query.useQuery(input, { refetchInterval })` | The same, polling (ms, or a function of the data; `false` stops) |
+| `api.ns.mutation.useMutation({ onSuccess })` | Writes: `.mutate(input)`, `.isPending`, `.error`, `.data`. After success, `onSuccess` runs, then **every query refetches**, so nothing needs listing. |
+| `api.ns.proc.call(input)` | Plain async call, outside React (mutations also refetch) |
+| `refresh()` | Refetch everything (e.g. after a change the page didn't make) |
 | `isRpcError(error, "CONFLICT")` | Check an error's code |
 
-**Mutations declare what they invalidate:** `invalidates: ["notes"]` refetches
-every `notes.*` query; `invalidates: ["notes.list"]` refetches one. After a
-delete, invalidate the list rather than the deleted item's own query.
+To leave a page after a mutation (e.g. after a delete), navigate in
+`useMutation({ onSuccess })`: it runs before the refetch, so the deleted item
+isn't fetched again.
+
+**Navigation:** plain `<a href="/notes/1">` links navigate without a full page
+load. In code: `navigate("/notes/1")`, or `navigate("?q=milk", { replace: true })`
+to change only the search. Hooks: `usePathname()`, `useSearchParams()`,
+`useParams()`. `notFound()` shows the not-found page.
 
 **State in the URL.** Filters, search, tabs and pagination go in search params
-via `validateSearch` and `loaderDeps` (example: `routes/index.tsx`), so they
-survive reloads and can be shared. Use component state only for form inputs and
-UI toggles.
+(`searchParams` prop, `navigate("?...")`), so they survive reloads and can be
+shared (example: `web/app/page.tsx`). Use component state only for form inputs
+and UI toggles.
 
-**Errors.** Loaders turn `NOT_FOUND` into `throw notFound()` (example:
-`routes/notes.$noteId.tsx`). Anything else reaches the error view in
-`components/states.tsx`, which has a retry button. Show mutation errors inline
-with `mutation.error.message`. Queries retry only `INTERNAL` errors.
-
-**Don't** call `fetch` directly, build query keys by hand, or copy server data
-into `useState`.
+**Don't** call `fetch` directly, use another router, or copy server data into
+`useState` (except to seed a form).
 
 ## Database
 
-**Generated types.** `app/src/db/schema.rs` has one struct per table
+**Generated types.** `server/src/db/schema.rs` has one struct per table
 (`notes` → `Note`) and one enum per Postgres enum (`note_priority` →
 `NotePriority`), with serde camelCase and `TS`. Use them in queries and return
 them from procedures. Nullable columns are `Option<T>`. Supported column types:
@@ -781,15 +788,15 @@ of these. `just check` names any unsupported column.
 
 ## Testing
 
-- **Integration tests** go in `app/tests/<feature>.rs`. `#[sqlx::test]` gives
+- **Integration tests** go in `server/tests/<feature>.rs`. `#[sqlx::test]` gives
   each test a fresh database; tests call procedures through the real HTTP
   router with `northstack::testing::Client`:
 
   ```rust
   #[sqlx::test(migrations = false)]
   async fn create_project(pool: PgPool) {
-      northstack::migrate(&pool, &app::MIGRATOR).await.unwrap();
-      let app = app::build();
+      northstack::migrate(&pool, &server::MIGRATOR).await.unwrap();
+      let app = server::build();
       let client = Client::new(app.router(AppState::new(pool.clone()), pool.clone(), Duration::from_secs(30)));
       let p: Project = client.call("projects.create", &json!({ "name": "Apollo" })).await.unwrap();
       assert_eq!(p.status, ProjectStatus::Active);
@@ -873,8 +880,8 @@ the code, and add a migration that drops the example tables.
 
 ## Rules
 
-- Never edit generated files: `app/src/db/schema.rs`, `web/src/rpc/`,
-  `web/src/routeTree.gen.ts`, `.sqlx/`. Regenerate with `just check`.
+- Never edit generated files: `server/src/db/schema.rs`, `web/northstack/`,
+  `.sqlx/`. Regenerate with `just check`.
 - Never redefine a table's row type by hand; use the generated one.
 - All SQL in `db.rs`, with bind parameters.
 - Enqueue jobs in the same transaction as the write that causes them, and make

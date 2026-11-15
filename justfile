@@ -59,7 +59,7 @@ logs *args:
 # Release binary with the frontend embedded: target/release/app
 build:
     cd web && bun run build
-    cargo build --release -p app
+    cargo build --release -p server
 
 # Format Rust code.
 fmt:

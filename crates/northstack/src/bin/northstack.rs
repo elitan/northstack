@@ -4,8 +4,8 @@
 //! northstack db-create                 create the database in DATABASE_URL
 //! northstack db-reset                  drop, create and migrate
 //! northstack migrate                   apply framework + app migrations
-//! northstack migration <name>          create app/migrations/<timestamp>_<name>.sql
-//! northstack gen-db [--check]          write app/src/db/schema.rs from the database
+//! northstack migration <name>          create server/migrations/<timestamp>_<name>.sql
+//! northstack gen-db [--check]          write server/src/db/schema.rs from the database
 //! ```
 //!
 //! Reads DATABASE_URL from the environment (`just` loads `.env`).
@@ -26,7 +26,7 @@ struct Cli {
     #[arg(long, env = "DATABASE_URL", global = true)]
     database_url: Option<String>,
     /// App migrations directory.
-    #[arg(long, default_value = "app/migrations", global = true)]
+    #[arg(long, default_value = "server/migrations", global = true)]
     migrations: PathBuf,
 }
 
@@ -42,7 +42,7 @@ enum Cmd {
     Migration { name: String },
     /// Generate Rust types from the database schema.
     GenDb {
-        #[arg(long, default_value = "app/src/db/schema.rs")]
+        #[arg(long, default_value = "server/src/db/schema.rs")]
         out: PathBuf,
         #[arg(long, default_value = "public")]
         schema: String,

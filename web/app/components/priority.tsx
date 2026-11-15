@@ -1,4 +1,4 @@
-import type { NotePriority } from "../rpc/types/NotePriority";
+import type { NotePriority } from "northstack";
 
 // Typed against the Postgres enum: adding a value in a migration makes this
 // object incomplete, and `just check` fails until it is handled here.

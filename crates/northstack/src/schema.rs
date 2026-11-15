@@ -6,7 +6,7 @@
 //! TypeScript client. Postgres is the source of truth:
 //!
 //! ```text
-//! migration -> Postgres -> app/src/db/schema.rs -> web/src/rpc/types/*.ts
+//! migration -> Postgres -> server/src/db/schema.rs -> web/northstack/types/*.ts
 //! ```
 //!
 //! Conventions, controlled with SQL comments:

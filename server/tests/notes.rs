@@ -3,17 +3,17 @@
 
 use std::time::Duration;
 
-use app::features::notes::DailyDigest;
-use app::features::notes::types::*;
-use app::{AppState, MIGRATOR};
 use northstack::testing::Client;
 use northstack::{ErrorCode, RpcError};
 use serde_json::json;
+use server::features::notes::DailyDigest;
+use server::features::notes::types::*;
+use server::{AppState, MIGRATOR};
 use sqlx::PgPool;
 
 async fn setup(pool: &PgPool) -> Client {
     northstack::migrate(pool, &MIGRATOR).await.unwrap();
-    let router = app::build().router(
+    let router = server::build().router(
         AppState::new(pool.clone()),
         pool.clone(),
         Duration::from_secs(30),
@@ -177,7 +177,7 @@ async fn update_and_delete(pool: PgPool) {
 async fn background_word_count(pool: PgPool) {
     let client = setup(&pool).await;
     let state = AppState::new(pool.clone());
-    let jobs = app::build();
+    let jobs = server::build();
     let jobs = jobs.jobs_ref();
 
     let note = create(&client, "Essay", "the quick brown fox").await;
@@ -226,7 +226,7 @@ async fn job_for_deleted_note_is_a_noop(pool: PgPool) {
         .call("notes.delete", &json!({ "id": note.id }))
         .await
         .unwrap();
-    let app = app::build();
+    let app = server::build();
     app.jobs_ref()
         .run_pending(&pool, AppState::new(pool.clone()))
         .await
@@ -244,7 +244,7 @@ async fn job_for_deleted_note_is_a_noop(pool: PgPool) {
 async fn daily_digest_cron(pool: PgPool) {
     let client = setup(&pool).await;
     create(&client, "One", "a b").await;
-    let app = app::build();
+    let app = server::build();
     let state = AppState::new(pool.clone());
     app.jobs_ref()
         .run_pending(&pool, state.clone())
@@ -305,8 +305,8 @@ async fn health_and_frontend(pool: PgPool) {
 /// The generated TypeScript client must match the Rust procedures.
 #[test]
 fn typescript_client_is_up_to_date() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../web/src/rpc");
-    app::build().rpc_ref().check_ts(dir).unwrap();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../web/northstack");
+    server::build().rpc_ref().check_ts(dir).unwrap();
 }
 
 /// The `note_priority` Postgres enum flows through Rust to the API: invalid

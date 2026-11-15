@@ -8,7 +8,7 @@ if [[ ! "$name" =~ ^[a-z][a-z0-9_]*$ ]]; then
   exit 1
 fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
-dir="$root/app/src/features/$name"
+dir="$root/server/src/features/$name"
 if [[ -e "$dir" ]]; then
   echo "feature $name already exists" >&2
   exit 1
@@ -73,22 +73,22 @@ cat > "$dir/jobs.rs" <<RS
 //! Background jobs for ${name}. Handlers must be idempotent.
 RS
 
-# A passing integration test to grow from (more patterns: app/tests/notes.rs).
-cat > "$root/app/tests/${name}.rs" <<RS
+# A passing integration test to grow from (more patterns: server/tests/notes.rs).
+cat > "$root/server/tests/${name}.rs" <<RS
 //! Integration tests for ${name}, through the real HTTP router.
 //! Each test gets a fresh database from \`#[sqlx::test]\`. More patterns:
-//! app/tests/notes.rs (errors, jobs, cron).
+//! server/tests/notes.rs (errors, jobs, cron).
 
 use std::time::Duration;
 
-use app::features::${name}::types::*;
-use app::{AppState, MIGRATOR};
+use server::features::${name}::types::*;
+use server::{AppState, MIGRATOR};
 use northstack::testing::Client;
 use sqlx::PgPool;
 
 async fn setup(pool: &PgPool) -> Client {
     northstack::migrate(pool, &MIGRATOR).await.unwrap();
-    let router = app::build().router(
+    let router = server::build().router(
         AppState::new(pool.clone()),
         pool.clone(),
         Duration::from_secs(30),
@@ -105,8 +105,8 @@ async fn ping(pool: PgPool) {
 RS
 
 # Register the module and wire it into build().
-echo "pub mod ${name};" >> "$root/app/src/features/mod.rs"
-python3 - "$root/app/src/lib.rs" "$name" <<'PY'
+echo "pub mod ${name};" >> "$root/server/src/features/mod.rs"
+python3 - "$root/server/src/lib.rs" "$name" <<'PY'
 import sys
 path, name = sys.argv[1], sys.argv[2]
 s = open(path).read()
@@ -114,10 +114,10 @@ marker = "    // northstack:features"
 add = (f"        .rpc(features::{name}::rpc())\n"
        f"        .jobs(features::{name}::jobs())\n"
        f"        .cron(features::{name}::cron())\n")
-assert marker in s, "marker comment missing in app/src/lib.rs"
+assert marker in s, "marker comment missing in server/src/lib.rs"
 s = s.replace(marker, add + marker, 1)
 open(path, "w").write(s)
 PY
 
-echo "created app/src/features/${name} and app/tests/${name}.rs; procedure ${prefix}.ping registered"
+echo "created server/src/features/${name} and server/tests/${name}.rs; procedure ${prefix}.ping registered"
 echo "next: README.md -> 'Building a feature, end to end'. Loop on 'just check', finish with 'just verify'."

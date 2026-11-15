@@ -16,7 +16,3 @@ export type Procedures = {
   "notes.stats": { kind: "query"; input: null; output: NoteStats };
   "notes.update": { kind: "mutation"; input: UpdateNoteInput; output: Note };
 };
-
-/** Dotted prefixes of procedure names, for invalidation. */
-export type Namespace =
-  | "notes";

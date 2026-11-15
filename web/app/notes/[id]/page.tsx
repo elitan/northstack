@@ -1,30 +1,18 @@
-import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
+// "/notes/:id": one note. An unknown id (NOT_FOUND from the API) shows
+// app/not-found.tsx automatically.
 import { useState } from "react";
-import { api, isRpcError } from "../rpc";
-import type { Note } from "../rpc/types/Note";
-import { PrioritySelect } from "../components/priority";
+import { api, navigate, notFound, type Note, type PageProps } from "northstack";
+import { PrioritySelect } from "../../components/priority";
 
-export const Route = createFileRoute("/notes/$noteId")({
-  loader: async ({ context: { queryClient }, params }) => {
-    try {
-      await api.notes.get.ensureData(queryClient, { id: params.noteId });
-    } catch (error) {
-      // Unknown id or not a UUID: show the not-found page.
-      if (isRpcError(error, "NOT_FOUND") || isRpcError(error, "BAD_REQUEST")) throw notFound();
-      throw error;
-    }
-  },
-  component: NotePage,
-});
-
-function NotePage() {
-  const { noteId } = Route.useParams();
-  const note = api.notes.get.useSuspenseQuery({ id: noteId });
+export default function NotePage({ params }: PageProps<{ id: string }>) {
+  if (!/^[0-9a-f-]{36}$/i.test(params.id)) notFound();
+  const note = api.notes.get.useQuery({ id: params.id });
   return (
     <>
-      <Link to="/" className="back">
+      <title>{`${note.title} · northstack`}</title>
+      <a href="/" className="back">
         ← All notes
-      </Link>
+      </a>
       {/* key: reset the form when navigating to another note */}
       <EditNote key={note.id} note={note} />
     </>
@@ -32,18 +20,14 @@ function NotePage() {
 }
 
 function EditNote({ note }: { note: Note }) {
-  const navigate = useNavigate();
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
   const [priority, setPriority] = useState(note.priority);
   const dirty = title !== note.title || body !== note.body || priority !== note.priority;
 
-  const save = api.notes.update.useMutation({ invalidates: ["notes"] });
-  const remove = api.notes.delete.useMutation({
-    // Not "notes": that would refetch this (deleted) note while leaving.
-    invalidates: ["notes.list", "notes.stats"],
-    onSuccess: () => navigate({ to: "/" }),
-  });
+  const save = api.notes.update.useMutation();
+  // Leave first, so the deleted note isn't refetched.
+  const remove = api.notes.delete.useMutation({ onSuccess: () => navigate("/") });
 
   return (
     <form

@@ -1,8 +1,13 @@
 [package]
-name = "app"
+name = "server"
 version = "0.1.0"
 edition = "2024"
 publish = false
+
+# The binary is the whole app: HTTP, jobs, cron, migrations.
+[[bin]]
+name = "app"
+path = "src/main.rs"
 
 [dependencies]
 northstack = { path = "../crates/northstack" }
