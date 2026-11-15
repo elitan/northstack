@@ -94,6 +94,24 @@ never edit generated files.
 Rename a column, and the compiler lists every query and every screen that
 still uses the old name. Nothing drifts silently.
 
+## Compared to Next.js
+
+The same app (same API, same SQL, same Postgres) built with northstack and with
+Next.js 16, each on the smallest Azure Container Apps size (0.25 vCPU, 0.5 GB).
+Requests were measured with 50 users at once. Measured November 2026.
+
+| | northstack | Next.js |
+|---|---:|---:|
+| Memory, idle | **2 MB** | 40 MB |
+| Memory, under load | **8 MB** | 102 MB |
+| Requests per second, a list of 50 rows | **293** | 80 |
+| Requests per second, a list of 200 rows | **103** | 39 |
+| Slowest 1% of requests, 200 rows | **0.7 s** | 10.2 s |
+
+When the database is the slow part (a heavy query), both are equally fast;
+northstack wins when the server itself does the work. Details in
+[Running in production](#running-in-production).
+
 ## Why it's nice
 
 - **Pages like Next.js.** A folder with a `page.tsx` is a URL. `[id]` is a
@@ -102,9 +120,8 @@ still uses the old name. Nothing drifts silently.
   the data. Every npm package works in the browser.
 - **Background jobs built in.** Send the email, resize the image, write the
   daily report: a job queue and a scheduler live in the same binary.
-- **Small and cheap to run.** One binary, about 2 MB of memory when idle and 8
-  MB under load. Several times the throughput of a comparable Next.js app on
-  the smallest cloud container ([measured](#running-in-production)).
+- **Small and cheap to run.** One binary, a few MB of memory, several times the
+  throughput of a comparable Next.js app ([see above](#compared-to-nextjs)).
 - **Made for agents.** One command checks everything and prints only what's
   wrong. The guide below is tested in CI, so it always matches the code.
 
