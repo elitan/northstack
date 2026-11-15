@@ -82,7 +82,7 @@ typecheck() {
   (cd web && bunx tsc -b --pretty false)
 }
 step typecheck \
-  "The frontend no longer matches the API or routes. Current API types: web/northstack/types/ and web/northstack/procedures.ts. Update the React code; never edit generated files." \
+  "The frontend no longer matches the API. Current API types: web/northstack/types/ and web/northstack/procedures.ts. Update the React code; never edit generated files." \
   typecheck
 
 if [[ $RELOAD == 1 && -f .dev/active ]]; then

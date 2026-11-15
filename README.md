@@ -1,95 +1,129 @@
 <h1 align="center">northstack</h1>
 
 <p align="center">
-  <strong>Web apps your AI agents can build, change and run without getting lost.</strong><br>
-  Postgres, Rust and React in one small binary, with types that flow from the database to the screen.
+  <strong>Build web apps with AI agents.</strong><br>
+  Postgres, Rust and React in one small binary.
 </p>
 
 <p align="center">
-  <a href="#get-started">Get started</a> ·
+  <a href="#try-it">Try it</a> ·
   <a href="#the-guide">The guide</a> ·
   <a href="AGENTS.md">For agents</a>
 </p>
 
 ---
 
-Agents are good at writing code and bad at guessing. Most stacks make them
-guess: which of five ways to fetch data, whether the API still matches the
-database, whether the server they just restarted is running the new code.
+northstack is a small framework for apps that AI agents write and maintain.
+You describe what you want; the agent builds it in a codebase where there's one
+obvious way to do everything, and the compiler catches mistakes before you ever
+see them.
 
-northstack removes the guessing. There's one way to do each thing, the compiler
-knows the whole app, and every command tells you exactly what's wrong and how
-to fix it.
+## A feature in three files
 
-### Change the database, and the compiler shows you the rest
+**1. The table.** A SQL migration.
 
 ```sql
-ALTER TABLE notes ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT false;
+-- server/migrations/20261201_projects.sql
+CREATE TABLE projects (
+    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL
+);
 ```
+
+**2. The API.** Plain Rust functions. The `Project` type is generated from the
+table above.
+
+```rust
+// server/src/features/projects/procedures.rs
+pub async fn list(ctx: Ctx<AppState>, _input: ()) -> RpcResult<Vec<Project>> {
+    Ok(db::list(&ctx.state.db).await?)
+}
+
+pub async fn create(ctx: Ctx<AppState>, input: NewProject) -> RpcResult<Project> {
+    northstack::ensure!(!input.name.is_empty(), "name is required");
+    Ok(db::insert(&ctx.state.db, &input.name).await?)
+}
+```
+
+**3. The page.** The folder is the URL, like Next.js. The API is already typed
+in React.
+
+```tsx
+// web/app/projects/page.tsx  ->  /projects
+import { api } from "northstack";
+
+export default function Projects() {
+  const projects = api.projects.list.useQuery(null);
+  const create = api.projects.create.useMutation();
+
+  return (
+    <>
+      <h1>Projects</h1>
+      <button onClick={() => create.mutate({ name: "Apollo" })}>Add Apollo</button>
+      <ul>
+        {projects.map((p) => <li key={p.id}>{p.name}</li>)}
+      </ul>
+    </>
+  );
+}
+```
+
+That's it: no REST routes, no fetch calls, no API types to write by hand. After
+`create` succeeds, the list refreshes on its own.
+
+## Mistakes don't get far
+
+Types flow from the database to the screen, so a typo or a changed column is
+caught by `just check` in a few seconds. Misspell a field in the example app:
 
 ```text
 $ just check
 ok   migrate    0s
 ok   gen-db     0s
-FAIL compile    0s
+ok   compile    1s
+ok   gen-ts     0s
+FAIL typecheck  0s
 
-server/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-server/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-server/src/features/notes/db.rs:57:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-server/src/features/notes/db.rs:82:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+app/page.tsx(95,25): error TS2561: Object literal may only specify known properties,
+but 'titel' does not exist in type 'CreateNoteInput'. Did you mean to write 'title'?
 
-how to fix: Fix the errors above. [...] the current schema is in server/src/db/schema.rs.
+how to fix: The frontend no longer matches the API. [...] Update the React code;
+never edit generated files.
 ```
 
-Fix the query, run it again, and the new field is in the TypeScript types the
-frontend uses. Add a value to a Postgres enum and React stops type-checking at
-the exact component that doesn't handle it yet. Nothing drifts silently.
+Rename a column, and the compiler lists every query and every screen that
+still uses the old name. Nothing drifts silently.
 
-### What you get
+## Why it's nice
 
-|  |  |
-|---|---|
-| **Pages like Next.js** | A folder with a `page.tsx` is a URL; `[id]` is a parameter; `layout.tsx` wraps what's below. No router config. |
-| **Types end to end** | Postgres → Rust → TypeScript, all generated. SQL is checked against the real database at compile time. |
-| **Typed RPC** | Write `async fn` in Rust; call `api.projects.list.useQuery()` in React. No REST routes, no schemas to keep in sync. |
-| **Background jobs and cron** | A Postgres job queue in the same binary: transactional enqueue, retries, safe across any number of replicas. |
-| **One binary** | Frontend embedded, migrations run at startup. Deploy one container, or run it as `serve` and `worker` to scale them separately. |
-| **Small and fast** | About 2 MiB of memory idle and 8 MiB under load. Several times the throughput of an equivalent Next.js app on the same 0.25 vCPU ([measured](#running-in-production)). |
-| **Made for the agent loop** | `just check` regenerates everything, compiles, type-checks and reloads the dev server in a few seconds, then prints only what failed. |
+- **Pages like Next.js.** A folder with a `page.tsx` is a URL. `[id]` is a
+  parameter. `layout.tsx` wraps the pages below it.
+- **One language per side.** Rust on the server, React in the browser, SQL for
+  the data. Every npm package works in the browser.
+- **Background jobs built in.** Send the email, resize the image, write the
+  daily report: a job queue and a scheduler live in the same binary.
+- **Small and cheap to run.** One binary, about 2 MB of memory when idle and 8
+  MB under load. Several times the throughput of a comparable Next.js app on
+  the smallest cloud container ([measured](#running-in-production)).
+- **Made for agents.** One command checks everything and prints only what's
+  wrong. The guide below is tested in CI, so it always matches the code.
 
-### What it looks like
+## Try it
 
-```rust
-// Rust: a procedure
-pub async fn create(ctx: Ctx<AppState>, input: CreateProjectInput) -> RpcResult<Project> {
-    northstack::ensure!(!input.name.trim().is_empty(), "name must not be empty");
-    Ok(db::insert(&ctx.state.db, input.name.trim()).await?)
-}
-```
-
-```tsx
-// React: the same procedure, typed from the Rust above
-const projects = api.projects.list.useQuery(null);  // typed: Project[]
-const create = api.projects.create.useMutation();     // the list refetches after it succeeds
-create.mutate({ name: "Apollo" });   // create.mutate({ nme: "Apollo" }) won't compile
-```
-
-### Get started
-
-You need Rust, Bun, `just` and Docker (for the local Postgres). On macOS:
+You need Rust, Bun, `just` and Docker. On macOS:
 
 ```sh
 brew install rustup bun just && rustup default stable
 git clone https://github.com/elitan/northstack && cd northstack
-just dev        # Postgres, api and frontend, ready at http://localhost:5173
+just dev        # open http://localhost:5173
 ```
 
-Then point your agent at the repo. It reads [AGENTS.md](AGENTS.md), which sends
-it to [the guide](#the-guide) below.
+You'll see a small notes app. It's an **example** that shows every pattern
+once; you replace it with your own features (`just remove-example` gives you an
+empty app).
 
-The code in `server/` and `web/` is **an example** (a small notes app) that shows
-every pattern once. You replace it with your own features; the framework in
-`crates/northstack` stays.
+Then point your coding agent at the repo. It reads [AGENTS.md](AGENTS.md), which
+sends it to [the guide](#the-guide) below.
 
 ---
 
