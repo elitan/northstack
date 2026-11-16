@@ -2,7 +2,7 @@
 # `just e2e`: browser smoke tests against the real binary.
 #
 # Builds the frontend, embeds it in the server binary, starts that binary on
-# E2E_PORT (default 3100) with its own database (<your db>_e2e, reset each run),
+# E2E_PORT (default 3100) with its own database (target/e2e/app.db, reset each run),
 # then runs Playwright (web/e2e/*.spec.ts) in headless Chromium.
 #
 #   just e2e                  all tests
@@ -16,7 +16,7 @@ if ! command -v cargo >/dev/null && [[ -x /opt/homebrew/opt/rustup/bin/cargo ]];
 fi
 die() { echo "error: $*" >&2; exit 1; }
 : "${DATABASE_URL:?DATABASE_URL is not set (run 'just dev' once, or set it)}"
-E2E_DB="${DATABASE_URL%%\?*}_e2e"
+E2E_DB="sqlite:target/e2e/app.db"
 PORT="${E2E_PORT:-3100}"
 export E2E_URL="http://localhost:$PORT"
 LOG=target/e2e/app.log
@@ -27,7 +27,7 @@ mkdir -p target/e2e
 echo "build    frontend + binary"
 (cd web && bun run --silent build >/dev/null) || die "frontend build failed (run 'just check')"
 cargo build -q -p server
-# Compile against the dev database (sqlx checks queries); run against _e2e.
+# Compile against the dev database (sqlx checks queries); run against the e2e one.
 export DATABASE_URL="$E2E_DB"
 cargo run -q -p northstack --bin northstack -- db-reset >/dev/null
 

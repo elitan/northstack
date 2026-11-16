@@ -36,7 +36,7 @@ pub async fn create(ctx: Ctx<AppState>, input: CreateNoteInput) -> RpcResult<Not
     let body = input.body.unwrap_or_default();
 
     // The note and its analyze job commit together, or not at all.
-    let mut tx = ctx.state.db.begin().await?;
+    let mut tx = northstack::db::begin(&ctx.state.db).await?;
     let priority = input.priority.unwrap_or(NotePriority::Normal);
     let note = db::insert(&mut *tx, title, &body, priority).await?;
     northstack::enqueue(&mut *tx, &AnalyzeNote { note_id: note.id }).await?;
@@ -48,7 +48,7 @@ pub async fn update(ctx: Ctx<AppState>, input: UpdateNoteInput) -> RpcResult<Not
     let title = input.title.as_deref().map(validate_title).transpose()?;
     let body_changed = input.body.is_some();
 
-    let mut tx = ctx.state.db.begin().await?;
+    let mut tx = northstack::db::begin(&ctx.state.db).await?;
     let note = db::update(
         &mut *tx,
         input.id,

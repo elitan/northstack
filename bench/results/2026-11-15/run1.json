@@ -1,0 +1,669 @@
+{
+  "limits": {
+    "cpus": "1",
+    "memory": "512m"
+  },
+  "duration_s": 12,
+  "image_mib": {
+    "northstack": 54.7,
+    "nextjs": 385.2,
+    "postgres": 627.2
+  },
+  "cold_start_s": {
+    "nextjs": 0.34,
+    "northstack": 0.13
+  },
+  "fresh_idle": {
+    "northstack": {
+      "cpu_avg": 0.0,
+      "mem_peak": 1.8,
+      "mem_avg": 1.8,
+      "mem_peak_by_container": {
+        "nsbench-ns": 1.8
+      }
+    },
+    "nextjs": {
+      "cpu_avg": 0.0,
+      "mem_peak": 158.3,
+      "mem_avg": 158.3,
+      "mem_peak_by_container": {
+        "nsbench-next": 135.3,
+        "nsbench-pg": 23.0
+      }
+    }
+  },
+  "idle_after_seed": {
+    "northstack": {
+      "cpu_avg": 0.0,
+      "mem_peak": 6.4,
+      "mem_avg": 6.2,
+      "mem_peak_by_container": {
+        "nsbench-ns": 6.4
+      }
+    },
+    "nextjs": {
+      "cpu_avg": 1.1,
+      "mem_peak": 236.1,
+      "mem_avg": 226.7,
+      "mem_peak_by_container": {
+        "nsbench-next": 208.4,
+        "nsbench-pg": 27.9
+      }
+    }
+  },
+  "runs": [
+    {
+      "rps": 8932.4,
+      "p50_ms": 0.1,
+      "p99_ms": 0.3,
+      "ok": 107206,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "page",
+      "concurrency": 1,
+      "cpu_avg": 67.9,
+      "mem_peak": 7.9,
+      "mem_avg": 7.7,
+      "mem_peak_by_container": {
+        "nsbench-ns": 7.9
+      }
+    },
+    {
+      "rps": 2301.4,
+      "p50_ms": 0.2,
+      "p99_ms": 1.9,
+      "ok": 27620,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "page",
+      "concurrency": 1,
+      "cpu_avg": 95.3,
+      "mem_peak": 238.5,
+      "mem_avg": 238.1,
+      "mem_peak_by_container": {
+        "nsbench-next": 210.7,
+        "nsbench-pg": 28.1
+      }
+    },
+    {
+      "rps": 3714.1,
+      "p50_ms": 0.2,
+      "p99_ms": 0.8,
+      "ok": 44577,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "get",
+      "concurrency": 1,
+      "cpu_avg": 78.2,
+      "mem_peak": 8.1,
+      "mem_avg": 7.9,
+      "mem_peak_by_container": {
+        "nsbench-ns": 8.1
+      }
+    },
+    {
+      "rps": 391.5,
+      "p50_ms": 2.0,
+      "p99_ms": 12.6,
+      "ok": 4701,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "get",
+      "concurrency": 1,
+      "cpu_avg": 105.2,
+      "mem_peak": 246.0,
+      "mem_avg": 245.3,
+      "mem_peak_by_container": {
+        "nsbench-next": 215.9,
+        "nsbench-pg": 30.1
+      }
+    },
+    {
+      "rps": 938.9,
+      "p50_ms": 0.6,
+      "p99_ms": 7.6,
+      "ok": 11268,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list50",
+      "concurrency": 1,
+      "cpu_avg": 82.8,
+      "mem_peak": 8.2,
+      "mem_avg": 7.9,
+      "mem_peak_by_container": {
+        "nsbench-ns": 8.2
+      }
+    },
+    {
+      "rps": 130.5,
+      "p50_ms": 3.9,
+      "p99_ms": 71.7,
+      "ok": 1566,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list50",
+      "concurrency": 1,
+      "cpu_avg": 94.0,
+      "mem_peak": 241.9,
+      "mem_avg": 240.9,
+      "mem_peak_by_container": {
+        "nsbench-next": 211.3,
+        "nsbench-pg": 30.8
+      }
+    },
+    {
+      "rps": 45.3,
+      "p50_ms": 11.7,
+      "p99_ms": 179.2,
+      "ok": 543,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list200",
+      "concurrency": 1,
+      "cpu_avg": 43.2,
+      "mem_peak": 8.8,
+      "mem_avg": 8.4,
+      "mem_peak_by_container": {
+        "nsbench-ns": 8.8
+      }
+    },
+    {
+      "rps": 117.7,
+      "p50_ms": 5.1,
+      "p99_ms": 63.7,
+      "ok": 1413,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list200",
+      "concurrency": 1,
+      "cpu_avg": 94.7,
+      "mem_peak": 244.7,
+      "mem_avg": 243.0,
+      "mem_peak_by_container": {
+        "nsbench-next": 213.9,
+        "nsbench-pg": 30.9
+      }
+    },
+    {
+      "rps": 1011.9,
+      "p50_ms": 0.6,
+      "p99_ms": 6.9,
+      "ok": 12147,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "stats",
+      "concurrency": 1,
+      "cpu_avg": 48.1,
+      "mem_peak": 9.1,
+      "mem_avg": 8.6,
+      "mem_peak_by_container": {
+        "nsbench-ns": 9.1
+      }
+    },
+    {
+      "rps": 390.1,
+      "p50_ms": 1.3,
+      "p99_ms": 19.0,
+      "ok": 4698,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "stats",
+      "concurrency": 1,
+      "cpu_avg": 97.9,
+      "mem_peak": 243.9,
+      "mem_avg": 243.2,
+      "mem_peak_by_container": {
+        "nsbench-next": 214.1,
+        "nsbench-pg": 30.0
+      }
+    },
+    {
+      "rps": 12491.1,
+      "p50_ms": 0.5,
+      "p99_ms": 5.6,
+      "ok": 149923,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "page",
+      "concurrency": 10,
+      "cpu_avg": 80.5,
+      "mem_peak": 9.8,
+      "mem_avg": 8.7,
+      "mem_peak_by_container": {
+        "nsbench-ns": 9.8
+      }
+    },
+    {
+      "rps": 913.9,
+      "p50_ms": 5.1,
+      "p99_ms": 88.6,
+      "ok": 10958,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "page",
+      "concurrency": 10,
+      "cpu_avg": 85.8,
+      "mem_peak": 246.9,
+      "mem_avg": 245.9,
+      "mem_peak_by_container": {
+        "nsbench-next": 218.9,
+        "nsbench-pg": 28.0
+      }
+    },
+    {
+      "rps": 3414.8,
+      "p50_ms": 1.6,
+      "p99_ms": 26.5,
+      "ok": 40979,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "get",
+      "concurrency": 10,
+      "cpu_avg": 83.6,
+      "mem_peak": 9.8,
+      "mem_avg": 9.1,
+      "mem_peak_by_container": {
+        "nsbench-ns": 9.8
+      }
+    },
+    {
+      "rps": 1309.0,
+      "p50_ms": 4.1,
+      "p99_ms": 58.8,
+      "ok": 15701,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "get",
+      "concurrency": 10,
+      "cpu_avg": 101.7,
+      "mem_peak": 269.6,
+      "mem_avg": 266.6,
+      "mem_peak_by_container": {
+        "nsbench-next": 226.7,
+        "nsbench-pg": 43.6
+      }
+    },
+    {
+      "rps": 2537.1,
+      "p50_ms": 2.0,
+      "p99_ms": 38.6,
+      "ok": 30440,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list50",
+      "concurrency": 10,
+      "cpu_avg": 99.0,
+      "mem_peak": 9.6,
+      "mem_avg": 9.3,
+      "mem_peak_by_container": {
+        "nsbench-ns": 9.6
+      }
+    },
+    {
+      "rps": 1352.4,
+      "p50_ms": 4.7,
+      "p99_ms": 51.1,
+      "ok": 16221,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list50",
+      "concurrency": 10,
+      "cpu_avg": 110.1,
+      "mem_peak": 271.6,
+      "mem_avg": 270.4,
+      "mem_peak_by_container": {
+        "nsbench-next": 228.3,
+        "nsbench-pg": 44.4
+      }
+    },
+    {
+      "rps": 713.8,
+      "p50_ms": 10.4,
+      "p99_ms": 45.4,
+      "ok": 8557,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list200",
+      "concurrency": 10,
+      "cpu_avg": 93.8,
+      "mem_peak": 10.7,
+      "mem_avg": 10.1,
+      "mem_peak_by_container": {
+        "nsbench-ns": 10.7
+      }
+    },
+    {
+      "rps": 622.2,
+      "p50_ms": 10.0,
+      "p99_ms": 60.6,
+      "ok": 7457,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list200",
+      "concurrency": 10,
+      "cpu_avg": 110.3,
+      "mem_peak": 272.8,
+      "mem_avg": 272.0,
+      "mem_peak_by_container": {
+        "nsbench-next": 230.1,
+        "nsbench-pg": 43.3
+      }
+    },
+    {
+      "rps": 7012.8,
+      "p50_ms": 0.6,
+      "p99_ms": 49.9,
+      "ok": 84170,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "stats",
+      "concurrency": 10,
+      "cpu_avg": 99.2,
+      "mem_peak": 9.6,
+      "mem_avg": 9.2,
+      "mem_peak_by_container": {
+        "nsbench-ns": 9.6
+      }
+    },
+    {
+      "rps": 2759.2,
+      "p50_ms": 2.1,
+      "p99_ms": 41.4,
+      "ok": 33105,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "stats",
+      "concurrency": 10,
+      "cpu_avg": 127.0,
+      "mem_peak": 274.4,
+      "mem_avg": 272.4,
+      "mem_peak_by_container": {
+        "nsbench-next": 230.4,
+        "nsbench-pg": 44.0
+      }
+    },
+    {
+      "rps": 25101.7,
+      "p50_ms": 1.6,
+      "p99_ms": 6.0,
+      "ok": 301213,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "page",
+      "concurrency": 50,
+      "cpu_avg": 94.3,
+      "mem_peak": 12.1,
+      "mem_avg": 10.5,
+      "mem_peak_by_container": {
+        "nsbench-ns": 12.1
+      }
+    },
+    {
+      "rps": 1515.1,
+      "p50_ms": 17.9,
+      "p99_ms": 104.0,
+      "ok": 18135,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "page",
+      "concurrency": 50,
+      "cpu_avg": 99.1,
+      "mem_peak": 270.4,
+      "mem_avg": 266.9,
+      "mem_peak_by_container": {
+        "nsbench-next": 242.3,
+        "nsbench-pg": 28.1
+      }
+    },
+    {
+      "rps": 11679.9,
+      "p50_ms": 3.4,
+      "p99_ms": 24.0,
+      "ok": 140127,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "get",
+      "concurrency": 50,
+      "cpu_avg": 96.6,
+      "mem_peak": 11.7,
+      "mem_avg": 10.9,
+      "mem_peak_by_container": {
+        "nsbench-ns": 11.7
+      }
+    },
+    {
+      "rps": 2130.7,
+      "p50_ms": 12.9,
+      "p99_ms": 82.5,
+      "ok": 25525,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "get",
+      "concurrency": 50,
+      "cpu_avg": 107.1,
+      "mem_peak": 283.4,
+      "mem_avg": 283.1,
+      "mem_peak_by_container": {
+        "nsbench-next": 240.2,
+        "nsbench-pg": 43.6
+      }
+    },
+    {
+      "rps": 4277.0,
+      "p50_ms": 7.6,
+      "p99_ms": 46.5,
+      "ok": 51280,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list50",
+      "concurrency": 50,
+      "cpu_avg": 97.0,
+      "mem_peak": 12.3,
+      "mem_avg": 11.8,
+      "mem_peak_by_container": {
+        "nsbench-ns": 12.3
+      }
+    },
+    {
+      "rps": 1576.8,
+      "p50_ms": 20.0,
+      "p99_ms": 74.2,
+      "ok": 18879,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list50",
+      "concurrency": 50,
+      "cpu_avg": 109.4,
+      "mem_peak": 291.8,
+      "mem_avg": 290.7,
+      "mem_peak_by_container": {
+        "nsbench-next": 247.5,
+        "nsbench-pg": 44.6
+      }
+    },
+    {
+      "rps": 1155.7,
+      "p50_ms": 32.4,
+      "p99_ms": 68.1,
+      "ok": 13820,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "list200",
+      "concurrency": 50,
+      "cpu_avg": 95.7,
+      "mem_peak": 12.5,
+      "mem_avg": 12.0,
+      "mem_peak_by_container": {
+        "nsbench-ns": 12.5
+      }
+    },
+    {
+      "rps": 686.4,
+      "p50_ms": 78.0,
+      "p99_ms": 171.9,
+      "ok": 8188,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "list200",
+      "concurrency": 50,
+      "cpu_avg": 110.5,
+      "mem_peak": 294.3,
+      "mem_avg": 292.5,
+      "mem_peak_by_container": {
+        "nsbench-next": 249.4,
+        "nsbench-pg": 44.9
+      }
+    },
+    {
+      "rps": 8128.5,
+      "p50_ms": 3.4,
+      "p99_ms": 52.0,
+      "ok": 97519,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "stats",
+      "concurrency": 50,
+      "cpu_avg": 97.8,
+      "mem_peak": 11.9,
+      "mem_avg": 11.1,
+      "mem_peak_by_container": {
+        "nsbench-ns": 11.9
+      }
+    },
+    {
+      "rps": 3049.3,
+      "p50_ms": 9.2,
+      "p99_ms": 62.6,
+      "ok": 36562,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "stats",
+      "concurrency": 50,
+      "cpu_avg": 127.7,
+      "mem_peak": 291.4,
+      "mem_avg": 290.1,
+      "mem_peak_by_container": {
+        "nsbench-next": 247.3,
+        "nsbench-pg": 44.4
+      }
+    },
+    {
+      "rps": 1397.5,
+      "p50_ms": 0.2,
+      "p99_ms": 8.7,
+      "ok": 16771,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "create",
+      "concurrency": 1,
+      "cpu_avg": 83.0,
+      "mem_peak": 30.9,
+      "mem_avg": 28.7,
+      "mem_peak_by_container": {
+        "nsbench-ns": 30.9
+      }
+    },
+    {
+      "rps": 1825.0,
+      "p50_ms": 0.5,
+      "p99_ms": 1.4,
+      "ok": 21901,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "create",
+      "concurrency": 1,
+      "cpu_avg": 94.5,
+      "mem_peak": 288.9,
+      "mem_avg": 284.3,
+      "mem_peak_by_container": {
+        "nsbench-next": 246.9,
+        "nsbench-pg": 43.1
+      }
+    },
+    {
+      "rps": 2664.0,
+      "p50_ms": 1.4,
+      "p99_ms": 54.9,
+      "ok": 31962,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "create",
+      "concurrency": 10,
+      "cpu_avg": 85.9,
+      "mem_peak": 35.1,
+      "mem_avg": 33.5,
+      "mem_peak_by_container": {
+        "nsbench-ns": 35.1
+      }
+    },
+    {
+      "rps": 1681.3,
+      "p50_ms": 3.9,
+      "p99_ms": 48.6,
+      "ok": 20170,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "create",
+      "concurrency": 10,
+      "cpu_avg": 133.2,
+      "mem_peak": 315.8,
+      "mem_avg": 311.2,
+      "mem_peak_by_container": {
+        "nsbench-next": 246.4,
+        "nsbench-pg": 69.6
+      }
+    },
+    {
+      "rps": 3240.3,
+      "p50_ms": 14.2,
+      "p99_ms": 63.7,
+      "ok": 38839,
+      "errors": 0,
+      "stack": "northstack",
+      "endpoint": "create",
+      "concurrency": 50,
+      "cpu_avg": 86.5,
+      "mem_peak": 46.5,
+      "mem_avg": 42.8,
+      "mem_peak_by_container": {
+        "nsbench-ns": 46.5
+      }
+    },
+    {
+      "rps": 1588.6,
+      "p50_ms": 20.9,
+      "p99_ms": 74.5,
+      "ok": 19016,
+      "errors": 0,
+      "stack": "nextjs",
+      "endpoint": "create",
+      "concurrency": 50,
+      "cpu_avg": 130.2,
+      "mem_peak": 326.8,
+      "mem_avg": 323.3,
+      "mem_peak_by_container": {
+        "nsbench-next": 247.1,
+        "nsbench-pg": 80.0
+      }
+    }
+  ],
+  "idle_after_load": {
+    "northstack": {
+      "cpu_avg": 98.3,
+      "mem_peak": 45.8,
+      "mem_avg": 45.3,
+      "mem_peak_by_container": {
+        "nsbench-ns": 45.8
+      }
+    },
+    "nextjs": {
+      "cpu_avg": 0.4,
+      "mem_peak": 327.2,
+      "mem_avg": 316.6,
+      "mem_peak_by_container": {
+        "nsbench-next": 245.7,
+        "nsbench-pg": 81.5
+      }
+    }
+  }
+}

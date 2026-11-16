@@ -67,11 +67,11 @@ step migrate \
   northstack migrate
 
 step gen-db \
-  "Rust types are generated from Postgres into server/src/db/schema.rs. In CI: run 'just check' locally and commit the file. For unsupported types, change the column type." \
+  "Rust types are generated from the database into server/src/db/schema.rs (and column types for the sqlx macros into server/sqlx.toml). In CI: run 'just check' locally and commit both. For unsupported types, change the column's declared type." \
   northstack gen-db $CI_FLAG
 
 step compile \
-  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in server/src/db/schema.rs. Custom enum columns need 'col AS \"col: EnumType\"' in SELECT and 'value as EnumType' for parameters." \
+  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in server/src/db/schema.rs. 'no built-in mapping found' means a computed column (count, sum, CASE, a subquery) needs its type: 'count(*) AS \"total!: i64\"' (! = never null)." \
   cargo build -q -p server --bin app --message-format short
 
 step gen-ts \
@@ -110,12 +110,22 @@ step test \
   "A test failed. Read the assertion above, fix the code (or the test if the behavior change is intended)." \
   cargo test -q --workspace
 
+# The offline query cache (.sqlx/) is built against a freshly migrated
+# database, never the dev one: sqlx records some types from the rows it finds
+# (an empty table and one with data can give different files), and CI checks
+# it against an empty database.
+sqlx_cache() {
+  local db="target/sqlx-prepare.db"
+  rm -f "$db" "$db-wal" "$db-shm"
+  DATABASE_URL="sqlite:$db" cargo run -q -p northstack --bin northstack -- migrate >/dev/null &&
+    DATABASE_URL="sqlite:$db" cargo sqlx prepare --workspace "$@" -- --all-targets
+}
 if [[ $MODE == "ci" ]]; then
   step sqlx-cache "The offline query cache (.sqlx/) is stale. Run 'just verify' locally and commit .sqlx/." \
-    cargo sqlx prepare --workspace --check -- --all-targets
+    sqlx_cache --check
 else
   step sqlx-cache "Refreshing .sqlx/ failed; make sure sqlx-cli is installed." \
-    cargo sqlx prepare --workspace -- --all-targets
+    sqlx_cache
 fi
 
 web_build() { (cd web && bunx vite build --logLevel error); }

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repo is a northstack app: Rust (axum + sqlx/Postgres) on the server, React +
+This repo is a northstack app: Rust (axum + sqlx/SQLite) on the server, React +
 TypeScript in the browser with Next.js-style folder routing (`web/app/`), typed
 RPC in between, shipped as one binary.
 
@@ -16,7 +16,7 @@ treat its features as requirements.
 ## The loop
 
 ```sh
-just dev       # once per session: Postgres, api :3000, Vite :5173, in the background
+just dev       # once per session: api :3000, Vite :5173, in the background
 just check     # after every change: regenerate, compile, typecheck, reload the api
 just verify    # before you're done: check + fmt + clippy + tests + build
 ```
@@ -30,26 +30,29 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 
 ## Never
 
-- Edit generated files: `server/src/db/schema.rs`, `web/northstack/`, `.sqlx/`.
-  They come from `just check`.
+- Edit generated files: `server/src/db/schema.rs`, `server/sqlx.toml`,
+  `web/northstack/`, `.sqlx/`. They come from `just check`.
 - Edit a migration that has been applied. Add a new one (`just migration <name>`).
 - Write SQL outside a feature's `db.rs`, or build SQL with `format!`.
 - Hand-write a table's row type. Use the generated struct from `crate::db`.
 - Call `fetch` in React or add another router. Use `api` and the `web/app/` folders.
 - Enqueue a job outside the transaction of the write that causes it, or write a
   job handler that isn't safe to run twice.
-- Keep state in memory that must survive restarts or be shared across replicas.
+- Keep state in memory that must survive restarts. Use the database (SQLite).
+- Start a transaction with `pool.begin()`. Use `northstack::db::begin(&pool)`.
+- Use `CURRENT_TIMESTAMP`/`datetime('now')`. Times are
+  `strftime('%Y-%m-%dT%H:%M:%f+00:00')` in SQL or a bound `DateTime<Utc>`.
 
 ## Where things go
 
 | You want to | Do this |
 |---|---|
 | Add a feature | `just new-feature <name>`, then README → "Building a feature" |
-| Change the schema | `just migration <name>`, write SQL, `just check` |
+| Change the schema | `just migration <name>`, write SQL, `just check` (column types: README → "Database") |
 | Add an endpoint | Function in `procedures.rs`, register in the feature's `mod.rs` |
 | Add a page | `web/app/<path>/page.tsx` (folders are URLs); data with `api.x.y.useQuery(input)` |
 | Run work later | A `Job` in `jobs.rs`; schedule it with `Cron` if it's periodic |
-| Test it | `server/tests/<feature>.rs` with `northstack::testing::Client` |
+| Test it | `server/tests/<feature>.rs` with `northstack::testing::{db, Client}` |
 | Test a user flow in the browser | `web/e2e/<flow>.spec.ts` (Playwright); run `just e2e` |
 | Start from an empty app | `just remove-example` |
 | Change the framework or README | Add a test for every behavior change; run `just readme-test` |

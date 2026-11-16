@@ -1,24 +1,85 @@
 //! Helpers for integration tests.
 //!
-//! Use with `#[sqlx::test(migrations = false)]`, which gives every test a
-//! fresh, isolated database:
+//! [`db`] gives every test its own fresh, migrated SQLite file (deleted when
+//! the test ends), opened with the same settings as production. Tests run in
+//! parallel without sharing data:
 //!
 //! ```ignore
-//! #[sqlx::test(migrations = false)]
-//! async fn creates_note(pool: PgPool) {
-//!     northstack::migrate(&pool, &server::MIGRATOR).await.unwrap();
-//!     let client = northstack::testing::Client::new(server::build().router_for_test(state, pool));
+//! #[tokio::test]
+//! async fn creates_note() {
+//!     let db = northstack::testing::db(&server::MIGRATOR).await;
+//!     let app = server::build();
+//!     let client = Client::new(app.router(AppState::new(db.pool()), db.pool(), Duration::from_secs(30)));
 //!     ...
 //! }
 //! ```
+
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use sqlx::SqlitePool;
+use sqlx::migrate::Migrator;
 use tower::ServiceExt;
 
 use crate::RpcError;
+
+/// A temporary database for one test. Deleted on drop.
+pub struct TestDb {
+    pool: SqlitePool,
+    path: PathBuf,
+}
+
+impl TestDb {
+    /// The pool (cheap to clone).
+    pub fn pool(&self) -> SqlitePool {
+        self.pool.clone()
+    }
+}
+
+impl std::ops::Deref for TestDb {
+    type Target = SqlitePool;
+    fn deref(&self) -> &SqlitePool {
+        &self.pool
+    }
+}
+
+impl Drop for TestDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let mut p = self.path.clone().into_os_string();
+            p.push(suffix);
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
+/// A fresh database with the framework's and the app's migrations applied.
+/// Pass `&sqlx::migrate::Migrator::DEFAULT` for framework tables only.
+pub async fn db(migrator: &Migrator) -> TestDb {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let path = std::env::temp_dir().join(format!(
+        "northstack-test-{}-{}-{nanos}.db",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let url = format!("sqlite:{}", path.display());
+    let pool = crate::db::connect(&url, 8)
+        .await
+        .unwrap_or_else(|e| panic!("creating test database {}: {e:#}", path.display()));
+    let db = TestDb { pool, path };
+    crate::migrate(&db, migrator)
+        .await
+        .unwrap_or_else(|e| panic!("migrating test database: {e:#}"));
+    db
+}
 
 /// In-process HTTP client for an axum router. No network involved.
 #[derive(Clone)]

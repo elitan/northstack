@@ -1,5 +1,5 @@
 //! API types for notes. Row types (`Note`, `NotePriority`) are generated from
-//! Postgres in `crate::db`; this file holds inputs and query-specific outputs.
+//! the database in `crate::db`; this file holds inputs and query-specific outputs.
 //! `#[derive(TS)]` generates the TypeScript definitions.
 
 pub use crate::db::{Note, NotePriority};

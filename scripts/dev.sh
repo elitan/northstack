@@ -2,14 +2,17 @@
 # Local dev environment, built for agents: every command returns when its
 # result is ready, and logs go to files instead of a terminal stream.
 #
-#   scripts/dev.sh [start]   start Postgres, the api and Vite in the background;
+#   scripts/dev.sh [start]   start the api and Vite in the background;
 #                            returns once both answer (idempotent)
-#   scripts/dev.sh stop      stop the api and Vite (Postgres keeps running)
+#   scripts/dev.sh stop      stop the api and Vite
 #   scripts/dev.sh status    what is running, and where
 #   scripts/dev.sh reload    restart the api with the current binary and wait
 #                            until it is ready (`just check` does this for you)
 #   scripts/dev.sh logs      recent warnings and errors from the api and Vite
 #   scripts/dev.sh logs all  the last 100 lines of each log
+#
+# The database is a file (DATABASE_URL in .env, default data/dev.db); there is
+# no database server to start.
 #
 # State lives in .dev/: api.pid, web.pid, api.log, web.log, and `active`, which
 # exists between `start` and `stop` and tells `just check` to reload the api
@@ -113,21 +116,6 @@ cmd_start() {
 
   load_env
 
-  # Postgres: use DATABASE_URL if reachable, otherwise start compose.yaml.
-  local host port
-  host=$(sed -E 's#^[a-z]+://([^@/]*@)?([^:/?]+).*#\2#' <<<"$DATABASE_URL")
-  port=$(sed -nE 's#^[a-z]+://([^@/]*@)?[^:/?]+:([0-9]+).*#\2#p' <<<"$DATABASE_URL")
-  export DB_PORT=${port:-5432}
-  if ! (exec 3<>"/dev/tcp/$host/$DB_PORT") 2>/dev/null; then
-    [[ $host == localhost || $host == 127.0.0.1 ]] \
-      || die "can't reach Postgres at $host:$DB_PORT (DATABASE_URL in .env)"
-    command -v docker >/dev/null || die "Postgres isn't running and Docker isn't installed"
-    docker info >/dev/null 2>&1 || die "Postgres isn't running and the Docker daemon isn't either; start Docker"
-    echo "starting Postgres (docker compose, port $DB_PORT)"
-    docker compose up -d --wait --quiet-pull db >/dev/null 2>&1 \
-      || die "docker compose failed; run 'docker compose up db' to see why"
-  fi
-
   if [[ ! -d web/node_modules || web/bun.lock -nt web/node_modules ]]; then
     echo "installing frontend dependencies"
     (cd web && bun install --silent && touch node_modules)
@@ -147,7 +135,7 @@ cmd_stop() {
   rm -f "$DIR/active"
   stop_one api
   stop_one web
-  echo "stopped api and web (Postgres keeps running: 'docker compose stop')"
+  echo "stopped api and web"
 }
 
 cmd_status() {

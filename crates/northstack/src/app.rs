@@ -21,9 +21,8 @@ use axum::http::{HeaderName, StatusCode};
 use axum::response::IntoResponse;
 use clap::{Parser, Subcommand};
 use rust_embed::RustEmbed;
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
-use sqlx::postgres::PgPoolOptions;
 use tokio_util::sync::CancellationToken;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
@@ -36,7 +35,7 @@ static NORTHSTACK_MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 /// Run the framework's migrations and then the app's. Both sets live in the
 /// same `_sqlx_migrations` table; each ignores the other's entries.
-pub async fn migrate(pool: &PgPool, app: &Migrator) -> anyhow::Result<()> {
+pub async fn migrate(pool: &SqlitePool, app: &Migrator) -> anyhow::Result<()> {
     let mut northstack = clone_migrator(&NORTHSTACK_MIGRATOR);
     northstack.set_ignore_missing(true);
     northstack.run(pool).await?;
@@ -81,23 +80,21 @@ enum Mode {
 /// Runtime configuration from environment variables.
 #[derive(Debug, Clone, Parser)]
 pub struct Config {
-    /// Postgres connection string.
-    #[arg(long, env = "DATABASE_URL")]
+    /// The SQLite database: `sqlite:data/app.db` (relative to the working
+    /// directory) or `sqlite:/data/app.db`. Created if missing.
+    #[arg(long, env = "DATABASE_URL", default_value = "sqlite:data/app.db")]
     pub database_url: String,
     #[arg(long, env = "HOST", default_value = "0.0.0.0")]
     pub host: String,
     #[arg(long, env = "PORT", default_value_t = 3000)]
     pub port: u16,
-    /// Max connections in this process's pool.
-    #[arg(long, env = "DB_MAX_CONNECTIONS", default_value_t = 10)]
+    /// Max connections in this process's pool (SQLite: readers run in
+    /// parallel, writers take turns).
+    #[arg(long, env = "DB_MAX_CONNECTIONS", default_value_t = 8)]
     pub db_max_connections: u32,
     /// Max concurrent jobs in this process.
     #[arg(long, env = "WORKER_CONCURRENCY", default_value_t = 8)]
     pub worker_concurrency: usize,
-    /// Use LISTEN/NOTIFY to wake workers. Set false behind PgBouncer
-    /// transaction pooling.
-    #[arg(long, env = "JOBS_LISTEN", default_value_t = true, action = clap::ArgAction::Set)]
-    pub jobs_listen: bool,
     /// Per-request timeout in seconds.
     #[arg(long, env = "REQUEST_TIMEOUT_SECS", default_value_t = 30)]
     pub request_timeout_secs: u64,
@@ -187,7 +184,7 @@ impl<S: Clone + Send + Sync + 'static> App<S> {
     }
 
     /// Build the HTTP router. Exposed for tests.
-    pub fn router(&self, state: S, pool: PgPool, request_timeout: Duration) -> axum::Router {
+    pub fn router(&self, state: S, pool: SqlitePool, request_timeout: Duration) -> axum::Router {
         let mut router = self.rpc.clone().into_router(state.clone());
         if let Some(extra) = self.routes.clone() {
             router = router.merge(extra.with_state(state));
@@ -236,7 +233,7 @@ impl<S: Clone + Send + Sync + 'static> App<S> {
     /// the connected pool.
     pub async fn run<F, Fut>(self, make_state: F) -> anyhow::Result<()>
     where
-        F: FnOnce(PgPool, Config) -> Fut,
+        F: FnOnce(SqlitePool, Config) -> Fut,
         Fut: Future<Output = anyhow::Result<S>>,
     {
         let cli = Cli::parse();
@@ -257,12 +254,7 @@ impl<S: Clone + Send + Sync + 'static> App<S> {
         crate::telemetry::init();
         let config = Config::try_parse_from(["app"])
             .map_err(|e| anyhow::anyhow!("invalid configuration: {e}"))?;
-        let pool = PgPoolOptions::new()
-            .max_connections(config.db_max_connections)
-            .acquire_timeout(Duration::from_secs(5))
-            .connect(&config.database_url)
-            .await
-            .map_err(|e| anyhow::anyhow!("connecting to database: {e}"))?;
+        let pool = crate::db::connect(&config.database_url, config.db_max_connections).await?;
 
         let empty = Migrator::DEFAULT;
         let app_migrator = self.migrator.unwrap_or(&empty);
@@ -287,7 +279,6 @@ impl<S: Clone + Send + Sync + 'static> App<S> {
             let jobs = Arc::new(self.jobs.clone());
             let wc = WorkerConfig {
                 concurrency: config.worker_concurrency,
-                listen: config.jobs_listen,
                 ..WorkerConfig::default()
             };
             tasks.spawn(run_workers(

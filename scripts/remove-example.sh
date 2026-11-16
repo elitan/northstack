@@ -63,5 +63,5 @@ if [[ -n ${DATABASE_URL:-} ]] && cargo run -q -p northstack --bin northstack -- 
   echo
   echo "next: just new-feature <name>, then README.md -> 'Building a feature, end to end'"
 else
-  echo "could not reach the database; start it with 'just dev', then run 'just db-reset' and 'just check'"
+  echo "could not reset the database (DATABASE_URL, set in .env by 'just dev'); run 'just db-reset' to see why, then 'just check'"
 fi

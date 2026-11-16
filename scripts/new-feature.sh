@@ -76,29 +76,24 @@ RS
 # A passing integration test to grow from (more patterns: server/tests/notes.rs).
 cat > "$root/server/tests/${name}.rs" <<RS
 //! Integration tests for ${name}, through the real HTTP router.
-//! Each test gets a fresh database from \`#[sqlx::test]\`. More patterns:
+//! Each test gets a fresh database from \`northstack::testing::db\`. More patterns:
 //! server/tests/notes.rs (errors, jobs, cron).
 
 use std::time::Duration;
 
 use server::features::${name}::types::*;
 use server::{AppState, MIGRATOR};
-use northstack::testing::Client;
-use sqlx::PgPool;
+use northstack::testing::{Client, TestDb};
 
-async fn setup(pool: &PgPool) -> Client {
-    northstack::migrate(pool, &MIGRATOR).await.unwrap();
-    let router = server::build().router(
-        AppState::new(pool.clone()),
-        pool.clone(),
-        Duration::from_secs(30),
-    );
-    Client::new(router)
+async fn setup() -> (TestDb, Client) {
+    let db = northstack::testing::db(&MIGRATOR).await;
+    let router = server::build().router(AppState::new(db.pool()), db.pool(), Duration::from_secs(30));
+    (db, Client::new(router))
 }
 
-#[sqlx::test(migrations = false)]
-async fn ping(pool: PgPool) {
-    let client = setup(&pool).await;
+#[tokio::test]
+async fn ping() {
+    let (_db, client) = setup().await;
     let out: ${type_prefix}Ping = client.call("${prefix}.ping", &()).await.unwrap();
     assert!(out.ok);
 }
