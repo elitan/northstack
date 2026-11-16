@@ -1,7 +1,8 @@
 import type { NotePriority } from "northstack";
 
-// Typed against the Postgres enum: adding a value in a migration makes this
-// object incomplete, and `just check` fails until it is handled here.
+// Typed against the generated enum (CHECK (priority IN (...))): adding a value
+// in a migration makes this object incomplete, and `just check` fails until it
+// is handled here.
 const LABELS: Record<NotePriority, string> = {
   low: "Low",
   normal: "Normal",

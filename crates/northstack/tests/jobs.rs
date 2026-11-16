@@ -1,29 +1,31 @@
-//! Job queue and cron behavior against a real Postgres. Each test gets a fresh
-//! database from `#[sqlx::test]`.
+//! Job queue and cron behavior against a real SQLite file. Each test gets a
+//! fresh database from `northstack::testing::db`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use northstack::testing::{TestDb, db};
 use northstack::{EnqueueOptions, Job, Jobs, WorkerConfig};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
 use tokio_util::sync::CancellationToken;
 
 static NO_APP_MIGRATIONS: Migrator = Migrator::DEFAULT;
 
-async fn setup(pool: &PgPool) {
-    northstack::migrate(pool, &NO_APP_MIGRATIONS).await.unwrap();
-    sqlx::query("CREATE TABLE runs (job_id INT NOT NULL)")
-        .execute(pool)
+async fn setup() -> TestDb {
+    let db = db(&NO_APP_MIGRATIONS).await;
+    sqlx::query("CREATE TABLE runs (job_id INTEGER NOT NULL)")
+        .execute(&*db)
         .await
         .unwrap();
+    db
 }
 
 #[derive(Clone)]
 struct State {
-    pool: PgPool,
+    pool: SqlitePool,
     calls: Arc<AtomicUsize>,
 }
 
@@ -77,14 +79,14 @@ fn registry() -> Jobs<State> {
         })
 }
 
-fn state(pool: &PgPool) -> State {
+fn state(pool: &SqlitePool) -> State {
     State {
         pool: pool.clone(),
         calls: Arc::new(AtomicUsize::new(0)),
     }
 }
 
-async fn status_of(pool: &PgPool, id: i64) -> (String, i32, Option<String>) {
+async fn status_of(pool: &SqlitePool, id: i64) -> (String, i32, Option<String>) {
     sqlx::query_as("SELECT status, attempts, last_error FROM northstack_jobs WHERE id = $1")
         .bind(id)
         .fetch_one(pool)
@@ -93,16 +95,19 @@ async fn status_of(pool: &PgPool, id: i64) -> (String, i32, Option<String>) {
 }
 
 /// Make a job that is waiting for its backoff ready right away.
-async fn skip_backoff(pool: &PgPool) {
-    sqlx::query("UPDATE northstack_jobs SET run_at = now() WHERE status = 'queued'")
+async fn skip_backoff(pool: &SqlitePool) {
+    sqlx::query(
+        "UPDATE northstack_jobs SET run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00') WHERE status = 'queued'",
+    )
         .execute(pool)
         .await
         .unwrap();
 }
 
-#[sqlx::test(migrations = false)]
-async fn runs_a_job_once(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn runs_a_job_once() {
+    let db = setup().await;
+    let pool = db.pool();
     let id = northstack::enqueue(&pool, &Record { n: 1 }).await.unwrap();
     let s = state(&pool);
     assert_eq!(registry().run_pending(&pool, s.clone()).await.unwrap(), 1);
@@ -112,10 +117,11 @@ async fn runs_a_job_once(pool: PgPool) {
     assert_eq!(registry().run_pending(&pool, s).await.unwrap(), 0);
 }
 
-#[sqlx::test(migrations = false)]
-async fn enqueue_is_transactional(pool: PgPool) {
-    setup(&pool).await;
-    let mut tx = pool.begin().await.unwrap();
+#[tokio::test]
+async fn enqueue_is_transactional() {
+    let db = setup().await;
+    let pool = db.pool();
+    let mut tx = northstack::db::begin(&pool).await.unwrap();
     northstack::enqueue(&mut *tx, &Record { n: 1 })
         .await
         .unwrap();
@@ -127,9 +133,10 @@ async fn enqueue_is_transactional(pool: PgPool) {
     assert_eq!(count, 0, "rolled-back enqueue must not leave a job");
 }
 
-#[sqlx::test(migrations = false)]
-async fn run_key_deduplicates(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn run_key_deduplicates() {
+    let db = setup().await;
+    let pool = db.pool();
     let opts = || EnqueueOptions {
         run_key: Some("once".into()),
         ..Default::default()
@@ -148,9 +155,10 @@ async fn run_key_deduplicates(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = false)]
-async fn scheduled_jobs_wait(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn scheduled_jobs_wait() {
+    let db = setup().await;
+    let pool = db.pool();
     let later = chrono::Utc::now() + chrono::Duration::hours(1);
     northstack::enqueue_with(
         &pool,
@@ -168,9 +176,10 @@ async fn scheduled_jobs_wait(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = false)]
-async fn failures_retry_with_backoff_then_die(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn failures_retry_with_backoff_then_die() {
+    let db = setup().await;
+    let pool = db.pool();
     let id = northstack::enqueue(&pool, &AlwaysFails).await.unwrap();
     let jobs = registry();
 
@@ -189,9 +198,10 @@ async fn failures_retry_with_backoff_then_die(pool: PgPool) {
     assert_eq!((status.as_str(), attempts), ("dead", 3));
 }
 
-#[sqlx::test(migrations = false)]
-async fn panics_are_contained(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn panics_are_contained() {
+    let db = setup().await;
+    let pool = db.pool();
     let id = northstack::enqueue(&pool, &Panics).await.unwrap();
     registry().run_pending(&pool, state(&pool)).await.unwrap();
     let (status, _, err) = status_of(&pool, id).await;
@@ -199,9 +209,10 @@ async fn panics_are_contained(pool: PgPool) {
     assert_eq!(err.as_deref(), Some("job panicked"));
 }
 
-#[sqlx::test(migrations = false)]
-async fn timeouts_are_enforced(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn timeouts_are_enforced() {
+    let db = setup().await;
+    let pool = db.pool();
     let id = northstack::enqueue(&pool, &Slow).await.unwrap();
     let started = std::time::Instant::now();
     registry().run_pending(&pool, state(&pool)).await.unwrap();
@@ -211,9 +222,10 @@ async fn timeouts_are_enforced(pool: PgPool) {
     assert!(err.unwrap().contains("timed out"));
 }
 
-#[sqlx::test(migrations = false)]
-async fn unknown_kinds_are_marked_dead(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn unknown_kinds_are_marked_dead() {
+    let db = setup().await;
+    let pool = db.pool();
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO northstack_jobs (kind, payload, max_attempts, timeout_secs) VALUES ('nobody.handles', '{}', 5, 60) RETURNING id",
     )
@@ -224,13 +236,15 @@ async fn unknown_kinds_are_marked_dead(pool: PgPool) {
     assert_eq!(status_of(&pool, id).await.0, "dead");
 }
 
-#[sqlx::test(migrations = false)]
-async fn expired_leases_are_retried(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn expired_leases_are_retried() {
+    let db = setup().await;
+    let pool = db.pool();
     let id = northstack::enqueue(&pool, &Record { n: 7 }).await.unwrap();
     // Simulate a worker that claimed the job and then crashed.
     sqlx::query(
-        "UPDATE northstack_jobs SET status = 'running', attempts = 1, locked_until = now() - interval '1 second' WHERE id = $1",
+        "UPDATE northstack_jobs SET status = 'running', attempts = 1,
+             locked_until = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '-1 seconds') WHERE id = $1",
     )
     .bind(id)
     .execute(&pool)
@@ -242,11 +256,12 @@ async fn expired_leases_are_retried(pool: PgPool) {
     assert_eq!((status.as_str(), attempts), ("done", 2));
 }
 
-/// Several "replicas" with many concurrent workers each: every job runs
-/// exactly once.
-#[sqlx::test(migrations = false)]
-async fn replicas_never_double_process(pool: PgPool) {
-    setup(&pool).await;
+/// Several worker loops (as during a deploy, when two processes share the
+/// file) with many concurrent workers each: every job runs exactly once.
+#[tokio::test]
+async fn replicas_never_double_process() {
+    let db = setup().await;
+    let pool = db.pool();
     const N: i32 = 300;
     for n in 0..N {
         northstack::enqueue(&pool, &Record { n }).await.unwrap();
@@ -298,10 +313,11 @@ async fn replicas_never_double_process(pool: PgPool) {
     assert_eq!(s.calls.load(Ordering::SeqCst), N as usize);
 }
 
-/// With a long poll interval, NOTIFY must wake an idle worker right away.
-#[sqlx::test(migrations = false)]
-async fn notify_wakes_idle_workers(pool: PgPool) {
-    setup(&pool).await;
+/// With a long poll interval, enqueue must wake an idle worker right away.
+#[tokio::test]
+async fn notify_wakes_idle_workers() {
+    let db = setup().await;
+    let pool = db.pool();
     let s = state(&pool);
     let shutdown = CancellationToken::new();
     let cfg = WorkerConfig {
@@ -316,7 +332,7 @@ async fn notify_wakes_idle_workers(pool: PgPool) {
         cfg,
         shutdown.clone(),
     ));
-    // Let the worker go idle and start listening.
+    // Let the worker go idle.
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let started = std::time::Instant::now();
@@ -327,7 +343,7 @@ async fn notify_wakes_idle_workers(pool: PgPool) {
         }
         assert!(
             started.elapsed() < Duration::from_secs(5),
-            "worker was not woken by NOTIFY"
+            "worker was not woken by enqueue"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -335,10 +351,57 @@ async fn notify_wakes_idle_workers(pool: PgPool) {
     worker.await.unwrap();
 }
 
-/// Every replica fires the same cron slot; exactly one job is enqueued.
-#[sqlx::test(migrations = false)]
-async fn cron_slot_enqueues_once_across_replicas(pool: PgPool) {
-    setup(&pool).await;
+/// The wake-up is process-wide: with idle worker loops on other databases
+/// waiting too (started before and after this one), enqueue still wakes the
+/// loop that can run the job.
+#[tokio::test]
+async fn enqueue_wakes_the_right_worker_among_several() {
+    let cfg = || WorkerConfig {
+        concurrency: 1,
+        poll_interval: Duration::from_secs(60),
+        ..Default::default()
+    };
+    let shutdown = CancellationToken::new();
+    let mut dbs = Vec::new();
+    let mut workers = Vec::new();
+    for _ in 0..3 {
+        let db = setup().await;
+        workers.push(tokio::spawn(northstack::jobs::run_workers(
+            db.pool(),
+            Arc::new(registry()),
+            state(&db.pool()),
+            cfg(),
+            shutdown.clone(),
+        )));
+        dbs.push(db);
+        // Let this loop go idle before starting the next one.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    let pool = dbs[1].pool();
+    let started = std::time::Instant::now();
+    let id = northstack::enqueue(&pool, &Record { n: 1 }).await.unwrap();
+    loop {
+        if status_of(&pool, id).await.0 == "done" {
+            break;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "enqueue woke a worker of another database instead of this one"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    shutdown.cancel();
+    for w in workers {
+        w.await.unwrap();
+    }
+}
+
+/// Several processes fire the same cron slot; exactly one job is enqueued.
+#[tokio::test]
+async fn cron_slot_enqueues_once_across_replicas() {
+    let db = setup().await;
+    let pool = db.pool();
     let make = || {
         northstack::Cron::new().add("test.tick", "0 * * * * *", |at| Record {
             n: at.timestamp() as i32,
@@ -386,9 +449,10 @@ fn duplicate_job_kind_panics() {
 }
 
 /// Graceful shutdown waits for running jobs to finish.
-#[sqlx::test(migrations = false)]
-async fn shutdown_waits_for_running_jobs(pool: PgPool) {
-    setup(&pool).await;
+#[tokio::test]
+async fn shutdown_waits_for_running_jobs() {
+    let db = setup().await;
+    let pool = db.pool();
 
     #[derive(Serialize, Deserialize)]
     struct Sleepy;
@@ -425,4 +489,108 @@ async fn shutdown_waits_for_running_jobs(pool: PgPool) {
     worker.await.unwrap();
     assert_eq!(s.calls.load(Ordering::SeqCst), 1);
     assert_eq!(status_of(&pool, id).await.0, "done");
+}
+
+/// A job enqueued inside a transaction is picked up promptly after commit,
+/// even though the wake-up fires before the commit.
+#[tokio::test]
+async fn enqueue_in_transaction_runs_promptly_after_commit() {
+    let db = setup().await;
+    let pool = db.pool();
+    let s = state(&pool);
+    let shutdown = CancellationToken::new();
+    let cfg = WorkerConfig {
+        concurrency: 2,
+        poll_interval: Duration::from_secs(60),
+        ..Default::default()
+    };
+    let worker = tokio::spawn(northstack::jobs::run_workers(
+        pool.clone(),
+        Arc::new(registry()),
+        s.clone(),
+        cfg,
+        shutdown.clone(),
+    ));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let mut tx = northstack::db::begin(&pool).await.unwrap();
+    let id = northstack::enqueue(&mut *tx, &Record { n: 1 })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    tx.commit().await.unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        if status_of(&pool, id).await.0 == "done" {
+            break;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "job enqueued in a transaction was not picked up after commit"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    shutdown.cancel();
+    worker.await.unwrap();
+}
+
+/// Two processes sharing the database file (as during a zero-downtime
+/// deploy): separate pools, each with workers. Every job runs exactly once.
+#[tokio::test]
+async fn two_processes_on_one_file_never_double_process() {
+    let db = setup().await;
+    let pool = db.pool();
+    const N: i32 = 200;
+    for n in 0..N {
+        northstack::enqueue(&pool, &Record { n }).await.unwrap();
+    }
+    // A second, independent pool on the same file = another process.
+    let url = format!("sqlite:{}", db.connect_options().get_filename().display());
+    let other = northstack::db::connect(&url, 8).await.unwrap();
+
+    let s = state(&pool);
+    let jobs = Arc::new(registry());
+    let shutdown = CancellationToken::new();
+    let mut workers = Vec::new();
+    for p in [pool.clone(), other.clone()] {
+        let cfg = WorkerConfig {
+            concurrency: 8,
+            poll_interval: Duration::from_millis(20),
+            ..Default::default()
+        };
+        workers.push(tokio::spawn(northstack::jobs::run_workers(
+            p,
+            jobs.clone(),
+            s.clone(),
+            cfg,
+            shutdown.clone(),
+        )));
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let done: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM northstack_jobs WHERE status = 'done'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        if done == N as i64 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "only {done}/{N} jobs finished"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    shutdown.cancel();
+    for w in workers {
+        w.await.unwrap();
+    }
+    let (runs, distinct): (i64, i64) =
+        sqlx::query_as("SELECT count(*), count(DISTINCT job_id) FROM runs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((runs, distinct), (N as i64, N as i64));
+    other.close().await;
 }

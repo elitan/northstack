@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Build web apps with AI agents.</strong><br>
-  Postgres, Rust and React in one small binary.
+  SQLite, Rust and React in one small binary.
 </p>
 
 <p align="center">
@@ -15,7 +15,8 @@
 
 northstack is an open-source, full-stack web framework: a **Rust** backend
 (axum, sqlx), a **React** frontend with Next.js-style folder routing, and
-**PostgreSQL**, shipped as **one small binary**. It's built for apps that AI
+**SQLite**, shipped as **one small binary**: no database server to run. It's
+built for apps that AI
 coding agents (Claude Code, Codex, Cursor) write and maintain: there's one
 obvious way to do everything, and the compiler catches mistakes before you ever
 see them.
@@ -27,7 +28,7 @@ see them.
 ```sql
 -- server/migrations/20261201_projects.sql
 CREATE TABLE projects (
-    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id   UUID PRIMARY KEY NOT NULL,
     name TEXT NOT NULL
 );
 ```
@@ -98,21 +99,29 @@ still uses the old name. Nothing drifts silently.
 
 ## Compared to Next.js
 
-The same app (same API, same SQL, same Postgres) built with northstack and with
-Next.js 16, each on the smallest Azure Container Apps size (0.25 vCPU, 0.5 GB).
-Requests were measured with 50 users at once. Measured November 2026.
+The same app (same API, same queries, same indexes) built with northstack and
+with Next.js 16 + Postgres 16. Each container gets 1 CPU and 512 MB, and both
+start with 1,000 rows. With 50 users at once (median of 3 runs):
 
-| | northstack | Next.js |
-|---|---:|---:|
-| Memory, idle | **2 MB** | 40 MB |
-| Memory, under load | **8 MB** | 102 MB |
-| Requests per second, a list of 50 rows | **293** | 80 |
-| Requests per second, a list of 200 rows | **103** | 39 |
-| Slowest 1% of requests, 200 rows | **0.7 s** | 10.2 s |
+| | northstack | Next.js + Postgres | |
+|---|---:|---:|---:|
+| Memory at rest | **6 MB** | 134 MB | **21x less** |
+| Memory under load | **12 MB** | 195 MB | **16x less** |
+| Serve the page, requests/s | **39,836** | 3,210 | **12x faster** |
+| Get one row, requests/s | **12,028** | 2,820 | **4.3x faster** |
+| List 50 rows, requests/s | **4,868** | 1,649 | **3.0x faster** |
+| Stats query (count + sum), requests/s | **8,235** | 3,120 | **2.6x faster** |
+| Create a row, requests/s | **3,391** | 1,884 | **1.8x faster** |
+| List 200 rows, requests/s | **1,133** | 746 | **1.5x faster** |
+| Slowest 1% of requests, get one row | **26 ms** | 67 ms | **2.6x faster** |
+| CPU used | **~0.95 core** | ~1.15 cores | **~17% less** |
+| Start until ready | **0.11 s** | 0.28 s | **2.5x faster** |
+| Docker images | **55 MB** | 1,012 MB | **18x smaller** |
 
-When the database is the slow part (a heavy query), both are equally fast;
-northstack wins when the server itself does the work. Details in
-[Running in production](#running-in-production).
+At 1 user northstack is 1.2–3.7x faster on every read; Next.js is faster at
+creating rows one at a time (northstack also runs a background job per row).
+The method, every test at 1, 10 and 50 users, and how to rerun it:
+[bench/README.md](bench/README.md). Measured November 2026 on a laptop.
 
 ## Why it's nice
 
@@ -122,8 +131,10 @@ northstack wins when the server itself does the work. Details in
   the data. Every npm package works in the browser.
 - **Background jobs built in.** Send the email, resize the image, write the
   daily report: a job queue and a scheduler live in the same binary.
-- **Small and cheap to run.** One binary, a few MB of memory, several times the
-  throughput of a comparable Next.js app ([see above](#compared-to-nextjs)).
+- **Small and cheap to run.** One binary and one database file. Single-digit MB
+  of memory, 1.5–12x the throughput of a comparable Next.js + Postgres app
+  ([see above](#compared-to-nextjs)). Memory is rarely what limits how many
+  apps fit on one server.
 - **Made for agents.** One command checks everything and prints only what's
   wrong. The guide below is tested in CI, so it always matches the code.
 
@@ -138,9 +149,11 @@ few MB of memory.
 which keeps it simple: no JavaScript runs on the server. For public pages that
 need SEO, a static site or pre-rendering is the better fit.
 
-**Which database does it use?** PostgreSQL only. Types for every table are
-generated from the database, and every query is checked against it at compile
-time.
+**Which database does it use?** SQLite, in WAL mode: one file next to the
+binary, no database server. Types for every table are generated from the
+database, and every query is checked against it at compile time. It suits apps
+that run on one machine (most do); it doesn't suit running many copies of the
+app behind a load balancer.
 
 **Can I use npm packages?** Yes, any package that runs in the browser. Server
 code is Rust, so server-side work uses Rust crates.
@@ -149,13 +162,14 @@ code is Rust, so server-side work uses Rust crates.
 most of the code: one pattern per task, a written guide, and checks that say
 exactly what's wrong and how to fix it.
 
-**How does it compare on cost?** On the smallest cloud container it uses a
-fraction of the memory of a comparable Next.js app (see the
-[comparison](#compared-to-nextjs)), which matters when you run many small apps.
+**How does it compare on cost?** An app uses about 6 MB of memory at rest and
+needs no database server, against about 134 MB for a comparable Next.js +
+Postgres app (see the [comparison](#compared-to-nextjs)). That matters when
+you run many small apps on one server.
 
 ## Try it
 
-You need Rust, Bun, `just` and Docker. On macOS:
+You need Rust, Bun and `just`. On macOS:
 
 ```sh
 brew install rustup bun just && rustup default stable
@@ -203,7 +217,7 @@ app](#starting-your-own-app)). The framework itself lives in `crates/northstack`
 
 ## The idea
 
-- **Postgres is the source of truth for types.** Row structs and enums are
+- **The database is the source of truth for types.** Row structs and enums are
   generated from the database schema into Rust, and from Rust into TypeScript.
   Add a column in a migration and the compiler points at every query and screen
   that must change.
@@ -214,7 +228,7 @@ app](#starting-your-own-app)). The framework itself lives in `crates/northstack`
 - **One binary.** The React frontend is embedded, migrations run at startup, and
   the same binary serves HTTP, runs background jobs and fires cron.
 
-Stack: Rust (axum, sqlx with compile-time-checked SQL, Postgres) on the server;
+Stack: Rust (axum, sqlx with compile-time-checked SQL, SQLite) on the server;
 React and TypeScript in the browser, built with Vite and Bun, with a small
 Next.js-style folder router. There is no server-side rendering and no Node at runtime.
 
@@ -223,7 +237,8 @@ Next.js-style folder router. There is no server-side rendering and no Node at ru
 Types flow one way. Every arrow is a generator, run by `just check`:
 
 ```
-server/migrations/*.sql ──migrate──▶ Postgres ──gen-db──▶ server/src/db/schema.rs (row structs, enums)
+server/migrations/*.sql ──migrate──▶ SQLite ──gen-db──▶ server/src/db/schema.rs (row structs, enums)
+                                                   ──gen-db──▶ server/sqlx.toml (column types for the query macros)
                                                               │
                                      your Rust: types.rs, db.rs, procedures.rs
                                                               │
@@ -235,16 +250,16 @@ server/migrations/*.sql ──migrate──▶ Postgres ──gen-db──▶ se
 A request at runtime:
 
 ```
-browser ── POST /rpc/notes.list {json} ──▶ axum ──▶ procedure(ctx, input) ──▶ sqlx ──▶ Postgres
+browser ── POST /rpc/notes.list {json} ──▶ axum ──▶ procedure(ctx, input) ──▶ sqlx ──▶ SQLite file
         ◀──────── 200 {json} or {code, message} with an HTTP status ◀──┘
 ```
 
-Background work goes through a job table in the same Postgres:
+Background work goes through a job table in the same database:
 
 ```
 procedure: BEGIN; INSERT note; enqueue(job); COMMIT   ──▶ northstack_jobs row
-worker (same binary, any replica): claim with SKIP LOCKED ──▶ handler(state, job) ──▶ done / retry / dead
-cron (same binary, any replica): enqueue one job per schedule slot, exactly once
+worker (same binary): claim with one atomic UPDATE ──▶ handler(state, job) ──▶ done / retry / dead
+cron (same binary): enqueue one job per schedule slot, exactly once
 ```
 
 ## Repository map
@@ -254,24 +269,26 @@ crates/northstack/        THE FRAMEWORK (generic; rarely changed)
   src/app.rs              App builder, CLI modes, HTTP router, config from env
   src/rpc.rs              Rpc registry: .query()/.mutation(), Ctx, POST /rpc/{name}
   src/error.rs            RpcError, ErrorCode, ensure! macro
-  src/jobs.rs             Postgres job queue: Job trait, Jobs registry, enqueue, workers
-  src/cron.rs             Cron schedules that enqueue jobs, safe across replicas
+  src/db.rs               SQLite settings, db::begin (write transactions), db::NOW
+  src/jobs.rs             Job queue in the database: Job trait, Jobs registry, enqueue, workers
+  src/cron.rs             Cron schedules that enqueue jobs, once per slot
   src/cpu.rs              Thread pool for CPU-heavy work (cpu::spawn)
-  src/schema.rs           gen-db: Postgres schema -> Rust structs and enums
+  src/schema.rs           gen-db: SQLite schema -> Rust structs, enums and sqlx.toml
   src/codegen.rs          gen-ts: Rust procedures -> TypeScript client
   src/ts/*.ts             Static parts of the generated TypeScript client
-  src/testing.rs          In-process HTTP client for tests
+  src/testing.rs          Test databases (testing::db) and an in-process HTTP client
   src/web.rs              Serves the embedded frontend (index.html fallback)
   src/bin/northstack.rs   Dev CLI: migrate, db-create, db-reset, migration, gen-db
   migrations/             The framework's own table (northstack_jobs)
-  tests/                  Framework tests (jobs, schema generation, codegen)
+  tests/                  Framework tests (jobs, database, schema generation, codegen)
 
-app/                      YOUR BACKEND (the notes code here is an example)
+server/                   YOUR BACKEND (the notes code here is an example)
   migrations/             SQL migrations, timestamped, append-only
   src/main.rs             Builds AppState and runs the App (rarely changed)
   src/lib.rs              build(): registers every feature
   src/state.rs            AppState: the db pool and anything else shared
-  src/db/schema.rs        GENERATED from Postgres. Never edit.
+  src/db/schema.rs        GENERATED from the database. Never edit.
+  sqlx.toml               GENERATED column types for the sqlx macros. Never edit.
   src/features/<name>/    One folder per feature (see below)
   tests/<name>.rs         Integration tests through the real HTTP router
 
@@ -293,7 +310,10 @@ scripts/new-feature.sh    Scaffolds a feature folder and registers it
 scripts/remove-example.sh Deletes the example app (just remove-example)
 scripts/readme_test.py    Runs the README walkthrough as written (just readme-test)
 scripts/e2e.sh            Browser smoke tests against the real binary (just e2e)
-compose.yaml              Local Postgres for development
+bench/                    Benchmark against Next.js + Postgres (bench/README.md)
+data/                     The dev database (data/dev.db), not committed
+clippy.toml               Lint rules (e.g. use db::begin, not pool.begin)
+.cargo/config.toml        SQLite build flags for concurrency (don't remove)
 .sqlx/                    GENERATED offline query cache (lets builds run without a DB)
 Dockerfile, justfile, .github/workflows/ci.yml
 ```
@@ -310,8 +330,8 @@ Every feature has the same five files:
 
 ## Setup
 
-Requirements: Rust (stable), Bun, `just`, and Docker (or your own Postgres).
-On macOS:
+Requirements: Rust (stable), Bun and `just`. No database server: SQLite is
+compiled into the binary. On macOS:
 
 ```sh
 brew install rustup bun just && rustup default stable
@@ -321,12 +341,12 @@ brew install sqlx-cli          # only needed by `just verify`
 Then, from a fresh clone:
 
 ```sh
-just dev                       # Postgres + api on :3000 + Vite on :5173, in the background
+just dev                       # api on :3000 + Vite on :5173, in the background
 ```
 
-`just dev` creates `.env` from `.env.example` if missing, starts Postgres with
-Docker (`compose.yaml`) unless `DATABASE_URL` is already reachable, installs
-frontend dependencies, runs `just check`, then starts the api and Vite in the
+`just dev` creates `.env` from `.env.example` if missing (the database is
+`data/dev.db`, created on first use), installs frontend dependencies, runs
+`just check`, then starts the api and Vite in the
 background. It returns once both answer. Running it again is a no-op. Open
 http://localhost:5173 (Vite proxies `/rpc` to the api).
 
@@ -350,8 +370,8 @@ result is ready, and logs go to files instead of a terminal stream.
 ```text
 $ just check
 ok   migrate    0s     apply migrations to the dev database
-ok   gen-db     0s     Postgres -> server/src/db/schema.rs
-ok   compile    4s     Rust, with every SQL query checked against Postgres
+ok   gen-db     0s     database -> server/src/db/schema.rs and server/sqlx.toml
+ok   compile    4s     Rust, with every SQL query checked against the database
 ok   gen-ts     0s     Rust -> web/northstack/
 ok   typecheck  1s     React against the generated types
 ok   reload     0s     restart the dev api (if running) and wait until ready
@@ -365,8 +385,8 @@ after a migration adds `notes.pinned`:
 ```text
 FAIL compile    0s
 
-server/src/features/notes/db.rs:18:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
-server/src/features/notes/db.rs:38:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:20:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
+server/src/features/notes/db.rs:40:9: error[E0063]: missing field `pinned` in initializer of `db::schema::Note`
 ...
 how to fix: Fix the errors above. 'error returned from database' means a query doesn't match
 the schema; the current schema is in server/src/db/schema.rs. [...]
@@ -377,7 +397,7 @@ All commands:
 | Command | What it does |
 |---|---|
 | `just dev` | Start the local environment (idempotent) |
-| `just dev status` / `just dev stop` | Show / stop the api and Vite (Postgres keeps running) |
+| `just dev status` / `just dev stop` | Show / stop the api and Vite |
 | `just dev reload` | Restart the api with the last build (`just check` does this) |
 | `just logs` | Warnings and errors since the api last started (`just logs all`: everything) |
 | `just check` | The fast loop above, 2–8 s |
@@ -385,7 +405,7 @@ All commands:
 | `just ci` | Like `verify`, but fails if generated files are stale instead of writing them |
 | `just migration <name>` | Create `server/migrations/<timestamp>_<name>.sql` |
 | `just new-feature <name>` | Scaffold `server/src/features/<name>/` and register it |
-| `just db-reset` | Drop, recreate and migrate the dev database (destroys data) |
+| `just db-reset` | Delete, recreate and migrate the dev database file (destroys data) |
 | `just remove-example` | Delete the example app and start from an empty one |
 | `just e2e` | Browser smoke tests: build the binary, start it with its own database, run `web/e2e/` in headless Chromium (CI runs it) |
 | `just readme-test` | Prove this README is true: run the feature walkthrough as written (CI runs it) |
@@ -418,19 +438,18 @@ Write the SQL there (example: `server/migrations/20261108000001_notes.sql`):
 
 <!-- readme-test: migration create_projects -->
 ```sql
-CREATE TYPE project_status AS ENUM ('active', 'archived');
-
-CREATE TABLE projects (
-    id         UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       TEXT           NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
-    status     project_status NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ    NOT NULL DEFAULT now()
+CREATE TABLE projects ( -- A project owned by a team.
+    id         UUID      PRIMARY KEY NOT NULL,
+    name       TEXT      NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+    -- Archived projects are hidden from lists.
+    status     TEXT      NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+    created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f+00:00'))
 );
-COMMENT ON TABLE projects IS 'A project owned by a team.';
 ```
 
-`just check` now generates `pub struct Project` and `pub enum ProjectStatus` in
-`server/src/db/schema.rs`, with docs taken from the SQL comments. (It reports a
+`just check` now generates `pub struct Project` and `pub enum ProjectStatus`
+(from the `CHECK (status IN (...))`) in `server/src/db/schema.rs`, with docs
+taken from the SQL comments, and records the column types in `server/sqlx.toml`. (It reports a
 compile error until step 5 replaces the placeholder `ping` procedure; that's
 expected.)
 
@@ -440,7 +459,7 @@ inputs and query-specific outputs by hand:
 
 <!-- readme-test: write server/src/features/projects/types.rs -->
 ```rust
-//! API types for projects. Row types come from Postgres (`crate::db`).
+//! API types for projects. Row types come from the database (`crate::db`).
 
 pub use crate::db::{Project, ProjectStatus};
 
@@ -472,31 +491,33 @@ pub struct ListProjectsOutput {
 ```rust
 //! All SQL for projects.
 
-use sqlx::{PgExecutor, PgPool};
+use sqlx::{SqliteExecutor, SqlitePool};
+use uuid::Uuid;
 
 use super::types::*;
 
 pub async fn insert<'e>(
-    db: impl PgExecutor<'e>,
+    db: impl SqliteExecutor<'e>,
     name: &str,
     status: ProjectStatus,
 ) -> sqlx::Result<Project> {
+    let id = Uuid::now_v7();
     sqlx::query_as!(
         Project,
-        r#"INSERT INTO projects (name, status) VALUES ($1, $2)
-           RETURNING id, name, status AS "status: ProjectStatus", created_at"#,
+        "INSERT INTO projects (id, name, status) VALUES ($1, $2, $3)
+         RETURNING id, name, status, created_at",
+        id,
         name,
-        status as ProjectStatus
+        status,
     )
     .fetch_one(db)
     .await
 }
 
-pub async fn list(db: &PgPool) -> sqlx::Result<Vec<Project>> {
+pub async fn list(db: &SqlitePool) -> sqlx::Result<Vec<Project>> {
     sqlx::query_as!(
         Project,
-        r#"SELECT id, name, status AS "status: ProjectStatus", created_at
-           FROM projects ORDER BY created_at DESC"#
+        "SELECT id, name, status, created_at FROM projects ORDER BY created_at DESC"
     )
     .fetch_all(db)
     .await
@@ -613,23 +634,18 @@ use std::time::Duration;
 use server::features::projects::types::*;
 use server::{AppState, MIGRATOR};
 use northstack::ErrorCode;
-use northstack::testing::Client;
+use northstack::testing::{Client, TestDb};
 use serde_json::json;
-use sqlx::PgPool;
 
-async fn setup(pool: &PgPool) -> Client {
-    northstack::migrate(pool, &MIGRATOR).await.unwrap();
-    let router = server::build().router(
-        AppState::new(pool.clone()),
-        pool.clone(),
-        Duration::from_secs(30),
-    );
-    Client::new(router)
+async fn setup() -> (TestDb, Client) {
+    let db = northstack::testing::db(&MIGRATOR).await; // fresh, migrated, deleted after the test
+    let router = server::build().router(AppState::new(db.pool()), db.pool(), Duration::from_secs(30));
+    (db, Client::new(router))
 }
 
-#[sqlx::test(migrations = false)]
-async fn create_and_list(pool: PgPool) {
-    let client = setup(&pool).await;
+#[tokio::test]
+async fn create_and_list() {
+    let (_db, client) = setup().await;
     let p: Project = client
         .call("projects.create", &json!({ "name": "  Apollo  " }))
         .await
@@ -641,9 +657,9 @@ async fn create_and_list(pool: PgPool) {
     assert_eq!(out.projects.len(), 1);
 }
 
-#[sqlx::test(migrations = false)]
-async fn rejects_empty_name(pool: PgPool) {
-    let client = setup(&pool).await;
+#[tokio::test]
+async fn rejects_empty_name() {
+    let (_db, client) = setup().await;
     let err = client
         .call::<_, Project>("projects.create", &json!({ "name": " " }))
         .await
@@ -734,8 +750,10 @@ pub async fn send_report(state: AppState, job: SendReport) -> anyhow::Result<()>
 - Failures retry with exponential backoff up to `MAX_ATTEMPTS`, then the job is
   marked `dead`. A panic or a timeout counts as a failure and doesn't affect
   other jobs. Finished jobs are deleted after 7 days.
-- Workers claim with `FOR UPDATE SKIP LOCKED` and wake instantly via
-  `LISTEN/NOTIFY`, so any number of replicas can run them.
+- Workers claim with one atomic `UPDATE ... RETURNING`, so a job never runs
+  twice at once, even when two processes share the database during a deploy.
+  An enqueue wakes this process's idle workers right away; they also poll
+  every second (that picks up jobs enqueued by `app serve` in another process).
 - CPU-heavy work (parsing, big computations) goes through
   `northstack::cpu::spawn(move || work()).await?`, never directly in async code.
   It runs on a separate thread pool so it never blocks requests.
@@ -750,7 +768,8 @@ pub fn cron() -> Cron {
 ```
 
 Cron only enqueues a job; the job does the work. Each schedule slot is enqueued
-exactly once across all replicas (no leader election needed).
+exactly once, even when two processes are up during a deploy. If the app is
+down (or asleep) at a scheduled time, that run is skipped.
 
 ### Other HTTP routes
 
@@ -828,32 +847,98 @@ and UI toggles.
 
 ## Database
 
+One SQLite file (`DATABASE_URL`, `sqlite:data/dev.db` in development), opened
+in WAL mode: reads run in parallel and never block, writes take turns (each
+waits up to 5 s for the previous one). That's thousands of short writes per
+second; keep transactions short.
+
+**Declared types.** SQLite stores few types, so a column's declared type says
+what it holds. `gen-db` maps it to Rust (and on to TypeScript):
+
+| Declare | Rust | TypeScript | Notes |
+|---|---|---|---|
+| `INTEGER` | `i64` | `number` | `INTEGER PRIMARY KEY` is an auto-increment id |
+| `REAL` | `f64` | `number` | |
+| `TEXT` | `String` | `string` | |
+| `TEXT CHECK (col IN ('a', 'b'))` | an enum | `"a" \| "b"` | Named struct + column: `notes.priority` → `NotePriority` |
+| `BOOLEAN` | `bool` | `boolean` | Stored as 0/1; `DEFAULT false` works |
+| `UUID` | `Uuid` | `string` | Generate in Rust: `Uuid::now_v7()` (sorts by time) |
+| `TIMESTAMP` | `DateTime<Utc>` | `string` | Default must be `(strftime('%Y-%m-%dT%H:%M:%f+00:00'))` |
+| `DATE` | `NaiveDate` | `string` | `2026-11-15` |
+| `JSON` | `serde_json::Value` | `JsonValue` | |
+| `BLOB` | `Vec<u8>` | `number[]` | |
+
+Anything else (`NUMERIC`, no type at all, ...) is reported by `just check`.
+There are no exact decimals: store money as `INTEGER` cents. Write `NOT NULL`
+on every column that can't be null, including a `UUID PRIMARY KEY` (SQLite
+allows NULL there otherwise). Nullable columns are `Option<T>`.
+
+**Times** are UTC text like `2026-11-15T10:00:00.123+00:00`. Set them in SQL
+with `strftime('%Y-%m-%dT%H:%M:%f+00:00')` (e.g. `updated_at =
+strftime('%Y-%m-%dT%H:%M:%f+00:00')`) or bind a `DateTime<Utc>` from Rust.
+Both forms compare and sort correctly as text. `date(col)`, `date($1, '+1
+day')` and the other SQLite date functions work on them. Don't use
+`CURRENT_TIMESTAMP` or `datetime('now')`: their format sorts wrong against
+times from Rust (`just check` rejects them as a `TIMESTAMP` default).
+
 **Generated types.** `server/src/db/schema.rs` has one struct per table
-(`notes` → `Note`) and one enum per Postgres enum (`note_priority` →
-`NotePriority`), with serde camelCase and `TS`. Use them in queries and return
-them from procedures. Nullable columns are `Option<T>`. Supported column types:
-bool, int2/4/8, float4/8, numeric (`BigDecimal`, a string in TS), text/varchar,
-uuid, timestamptz, timestamp, date, time, json/jsonb, bytea, enums, and arrays
-of these. `just check` names any unsupported column.
+(`notes` → `Note`) and one enum per `CHECK (col IN (...))` column, with serde
+camelCase and `TS`. Use them in queries and return them from procedures.
+`server/sqlx.toml` tells the query macros the same column types, so `SELECT id,
+priority, created_at ...` decodes into `Uuid`, `NotePriority` and
+`DateTime<Utc>` without annotations.
 
-**Conventions in SQL comments:**
+**Conventions in SQL comments** (inside `CREATE TABLE`):
 
-- `COMMENT ON TABLE/COLUMN ... IS '...'` becomes documentation in Rust and TS.
-- `@private` in a column comment keeps it out of JSON and TypeScript. Use it for
-  password hashes and anything else the browser must not see.
-- `@name(Person)` in a table comment sets the struct name (`people` → `Person`).
-  Use it when the automatic singular is wrong.
-- `@skip` in a table comment skips the table.
+```sql
+CREATE TABLE people ( -- Someone with an account. @name(Person)
+    id            UUID PRIMARY KEY NOT NULL,
+    -- Login email, unique.
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL, -- Argon2 hash. @private
+    plan          TEXT NOT NULL CHECK (plan IN ('free', 'pro')) -- @enum(Plan)
+);
+```
+
+- A comment on the `CREATE TABLE` line documents the table; a comment above a
+  column or after it on the same line documents the column. Both become
+  documentation in Rust and TypeScript.
+- `@private` keeps a column out of JSON and TypeScript. Use it for password
+  hashes and anything else the browser must not see.
+- `@name(Person)` on the table sets the struct name (`people` → `Person`), for
+  when the automatic singular is wrong. `@enum(Plan)` names an enum.
+- `@skip` on the table skips it. Virtual tables (FTS5 search) are skipped
+  automatically.
+- `ALTER TABLE ... ADD COLUMN` can't carry a comment: SQLite copies the column
+  text into the table definition, and a trailing `--` comment breaks it. To
+  document a column added later, rebuild the table (below).
 
 **Writing queries:**
 
 - All SQL lives in the feature's `db.rs`, via `sqlx::query!` / `query_as!`
-  with bind parameters. Never build SQL with `format!`.
-- Enum columns need a type hint: `SELECT status AS "status: ProjectStatus"`, and
-  `status as ProjectStatus` for parameters.
-- Optional filters: `WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')`.
-- Take `impl PgExecutor<'e>` instead of `&PgPool` when the query must also work
-  inside a transaction (`&mut *tx`).
+  with bind parameters (`$1`, `$2`, ...). Never build SQL with `format!`.
+- Optional filters: `WHERE ($1 IS NULL OR name LIKE '%' || $1 || '%')`. `LIKE`
+  ignores case for ASCII letters only.
+- Computed columns (`count(*)`, `sum`, `CASE`, subqueries) have no table type;
+  name it in the alias: `count(*) AS "total!: i64"` (`!` = never null),
+  `max(day) AS "last: chrono::NaiveDate"`.
+- Parameters are not type-checked by SQLite: bind the Rust type that matches
+  the column (`Uuid` for a `UUID` column, not its string).
+- Enums sort as text. To sort by meaning, use `ORDER BY CASE status WHEN 'high'
+  THEN 2 ... END`.
+- **Every list needs an index that matches its `ORDER BY`**, or SQLite copies
+  and sorts the whole table on each request (with 1,000 rows, a 200-row list
+  went from 0.6 ms to 0.04 ms with the index). An index can hold the same
+  expression: `CREATE INDEX notes_list ON notes ((CASE priority WHEN 'high'
+  THEN 2 ... END) DESC, created_at DESC)` (example:
+  `server/migrations/20261108000001_notes.sql`). Check with `EXPLAIN QUERY
+  PLAN`: "USE TEMP B-TREE FOR ORDER BY" means a sort.
+- Take `impl SqliteExecutor<'e>` instead of `&SqlitePool` when the query must
+  also work inside a transaction (`&mut *tx`).
+- Start transactions with `northstack::db::begin(&ctx.state.db)`, never
+  `pool.begin()` (clippy rejects it). It takes the write lock up front, so two
+  transactions that read and then write wait for each other instead of failing
+  with "database is locked".
 - When a table gains a column, every `query_as!(Table, ...)` must select it;
   the compiler lists each query. Joins and aggregates return hand-written
   structs in `types.rs`.
@@ -862,38 +947,64 @@ of these. `just check` names any unsupported column.
 
 - Append-only: never edit a migration that has been applied anywhere. In
   development, `just db-reset` starts over.
-- Backward compatible (expand, then contract): during a rolling deploy, old and
-  new binaries run against the same schema.
-- Prefer Postgres enums and `CHECK` constraints for fixed sets of values. An
-  enum flows into Rust and TypeScript, so adding a value makes the compiler point
+- Backward compatible (expand, then contract): during a deploy, the old binary
+  keeps running for a moment against the new schema.
+- `ALTER TABLE` can add a column (`ADD COLUMN`, with a `DEFAULT` if it's `NOT
+  NULL`), rename a table or column, and drop a column. To change a column's
+  type, constraint or enum values, rebuild the table in one migration, exactly
+  like this:
+
+  ```sql
+  -- no-transaction
+  PRAGMA foreign_keys = OFF;
+  BEGIN;
+  CREATE TABLE notes_new ( ... the new definition ... );
+  INSERT INTO notes_new (id, title, ...) SELECT id, title, ... FROM notes;
+  DROP TABLE notes;
+  ALTER TABLE notes_new RENAME TO notes;
+  -- recreate the table's indexes here
+  COMMIT;
+  PRAGMA foreign_keys = ON;
+  ```
+
+  The first three lines matter. With foreign keys on, `DROP TABLE notes`
+  deletes every row in other tables that reference notes (`ON DELETE
+  CASCADE`), or fails. `PRAGMA foreign_keys` can only change outside a
+  transaction, so the migration opts out of the automatic one
+  (`-- no-transaction`, the first line) and opens its own. References from
+  other tables follow the rename and keep working.
+
+- Use `CHECK (col IN (...))` for fixed sets of values. The enum flows into Rust
+  and TypeScript, so adding a value (a table rebuild) makes the compiler point
   at every place that must handle it.
 
 ## Testing
 
-- **Integration tests** go in `server/tests/<feature>.rs`. `#[sqlx::test]` gives
-  each test a fresh database; tests call procedures through the real HTTP
-  router with `northstack::testing::Client`:
+- **Integration tests** go in `server/tests/<feature>.rs`.
+  `northstack::testing::db(&MIGRATOR)` gives each test its own fresh, migrated
+  database file (deleted when the test ends), so tests run in parallel. Tests
+  call procedures through the real HTTP router with `northstack::testing::Client`:
 
   ```rust
-  #[sqlx::test(migrations = false)]
-  async fn create_project(pool: PgPool) {
-      northstack::migrate(&pool, &server::MIGRATOR).await.unwrap();
+  #[tokio::test]
+  async fn create_project() {
+      let db = northstack::testing::db(&server::MIGRATOR).await;
       let app = server::build();
-      let client = Client::new(app.router(AppState::new(pool.clone()), pool.clone(), Duration::from_secs(30)));
+      let client = Client::new(app.router(AppState::new(db.pool()), db.pool(), Duration::from_secs(30)));
       let p: Project = client.call("projects.create", &json!({ "name": "Apollo" })).await.unwrap();
       assert_eq!(p.status, ProjectStatus::Active);
   }
   ```
 
 - Error cases: `client.call(...)` returns `Err(RpcError)`; assert on `.code`.
-- Jobs: `app.jobs_ref().run_pending(&pool, state).await` runs everything queued.
-- Cron: `app.cron_ref().fire(&pool, "projects.nightly_report", at).await`
+- Jobs: `app.jobs_ref().run_pending(&db, state).await` runs everything queued.
+- Cron: `app.cron_ref().fire(&db, "projects.nightly_report", at).await`
   enqueues one slot.
 - `just verify` runs every test. The framework's own tests are in
   `crates/northstack/tests`.
 - **Browser smoke tests** go in `web/e2e/*.spec.ts` (Playwright). `just e2e`
   builds the frontend into the binary, starts it on :3100 with its own database
-  (`<your db>_e2e`, reset each run) and runs them in headless Chromium; CI runs
+  (`target/e2e/app.db`, reset each run) and runs them in headless Chromium; CI runs
   it too. Keep them few: one test per important user flow, using labels and
   roles (`page.getByLabel("Title")`), not CSS classes. `app.spec.ts` checks any
   app (loads without console errors, unknown URLs 404); `notes.spec.ts` walks
@@ -904,6 +1015,14 @@ of these. `just check` names any unsupported column.
 Build: `just build` (binary at `target/release/app`) or
 `docker build -t app .`. The Docker build uses the committed `.sqlx/` cache, so
 it needs no database. The image is distroless and runs as non-root.
+
+**The database is a file**, `/data/app.db` in the image. Mount a persistent
+volume at `/data` on the machine's local disk (`docker run -v app-data:/data
+app`, or a volume in your platform, e.g. frost). Never put it on a network file
+system (NFS, SMB, Azure Files): SQLite's locking doesn't work there and the
+file can be corrupted. Migrations run at startup. Zero-downtime deploys are
+fine: the old and new process share the file for a moment, and SQLite
+coordinates them.
 
 One binary, four modes:
 
@@ -918,29 +1037,40 @@ Configuration (environment):
 
 | Variable | Default | |
 |---|---|---|
-| `DATABASE_URL` | required | Postgres connection string |
+| `DATABASE_URL` | `sqlite:data/app.db` | The database file (`sqlite:/data/app.db` in the image); created if missing |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | |
-| `DB_MAX_CONNECTIONS` | `10` | Pool size per process |
+| `DB_MAX_CONNECTIONS` | `8` | Pool size (readers run in parallel; writers take turns) |
 | `WORKER_CONCURRENCY` | `8` | Concurrent jobs per process |
-| `JOBS_LISTEN` | `true` | Set `false` behind PgBouncer in transaction mode |
 | `MIGRATE_ON_START` | `true` | |
 | `REQUEST_TIMEOUT_SECS` | `30` | |
 | `CPU_THREADS` | cores − 1 | Size of the CPU pool |
 | `LOG_FORMAT` | `json` | `pretty` for development |
 | `RUST_LOG` | `info` | |
 
-**Scaling.** The binary is stateless; all state, including the job queue, is in
-Postgres. Run as many replicas as you like. To scale HTTP and jobs separately,
-deploy the same image twice, as `app serve` and `app worker`.
+**Scaling.** One app = one process on one machine, with all state (including
+the job queue) in its database file. Scale up (more CPU, faster disk), not out:
+don't run several copies behind a load balancer, each would get its own file.
+`app serve` and `app worker` exist to run HTTP and jobs as separate processes
+on the same machine and volume.
 
-**Measured** on Azure Container Apps (0.25 vCPU / 0.5 GiB, Postgres in the same
-region), against an equivalent Next.js 16 + Kysely app with the same endpoints
-and SQL: about 2 MiB of memory idle and 8 MiB under load (Next.js: 40 and 102
-MiB), and 3–4× the requests per second on endpoints where the app, not the
-database, does the work (for example 293 vs 80 req/s listing 50 rows at 50
-concurrent users). When the database is the bottleneck, both are equal.
+**Backups.** Copy the file safely while the app runs with SQLite's `VACUUM
+INTO` (a consistent snapshot) or stream it to object storage with
+[Litestream](https://litestream.io). A built-in backup command isn't there yet
+([Not built yet](#not-built-yet)).
 
-**CI** (`.github/workflows/ci.yml`) runs `just ci` against a fresh Postgres:
+**Measured** against an equivalent Next.js 16 + Kysely + Postgres 16 app, each
+container limited to 1 CPU and 512 MB: about 6 MB of memory at rest and 12 MB
+under load (Next.js + Postgres: 134 and 195 MB), and 1.5–12x the requests per
+second at 50 concurrent users. Full results and the harness:
+[bench/README.md](bench/README.md).
+
+**SQLite build flags.** `.cargo/config.toml` builds the bundled SQLite without
+`SQLITE_ENABLE_MEMORY_MANAGEMENT` (which puts every connection's page cache
+behind one global lock) and with `SQLITE_DEFAULT_MEMSTATUS=0`. With the default
+build, concurrent queries take turns: listing rows at 10 users was about 5x
+slower. A test in `crates/northstack/tests/db.rs` checks the flags.
+
+**CI** (`.github/workflows/ci.yml`) runs `just ci` against a fresh database:
 every generated file must be up to date, and format, lint, tests and the
 frontend build must pass. Then it runs `just readme-test`: starting from
 `just remove-example`, it follows [Building a
@@ -969,15 +1099,15 @@ the code, and add a migration that drops the example tables.
 
 ## Rules
 
-- Never edit generated files: `server/src/db/schema.rs`, `web/northstack/`,
-  `.sqlx/`. Regenerate with `just check`.
+- Never edit generated files: `server/src/db/schema.rs`, `server/sqlx.toml`,
+  `web/northstack/`, `.sqlx/`. Regenerate with `just check`.
 - Never redefine a table's row type by hand; use the generated one.
 - All SQL in `db.rs`, with bind parameters.
 - Enqueue jobs in the same transaction as the write that causes them, and make
   handlers idempotent.
 - Don't hold a transaction open across slow I/O (HTTP calls, big CPU work).
-- Don't keep state in memory that must survive a restart or be shared across
-  replicas. Use Postgres.
+- Don't keep state in memory that must survive a restart. Use the database.
+- Start write transactions with `northstack::db::begin`, never `pool.begin()`.
 - Don't add a dependency when the standard library or an existing dependency
   covers it.
 - A change is done when `just verify` passes and the generated files are
@@ -989,12 +1119,15 @@ the code, and add a migration that drops the example tables.
   `ctx.user()` in procedures and a protected layout route in React. Until then,
   `ctx.require::<T>()` is the hook, but there is no built-in middleware to
   populate it.
+- **Backups.** Planned: a built-in snapshot (`VACUUM INTO`) uploaded to
+  S3-compatible storage on a schedule. Until then, use Litestream or copy a
+  `VACUUM INTO` snapshot yourself.
 - Admin UI, file storage, realtime updates, rate limiting, security headers,
   audit logging, OpenTelemetry.
 - Generated insert/update types per table (deliberately: inputs are written by
   hand so clients can't set columns they shouldn't).
-- Postgres types without generated mappings: inet, geometric types, ranges.
-  Joins and aggregates use hand-written types.
+- Exact decimals (store cents as `INTEGER`), arrays (use `JSON` or a child
+  table). Joins and aggregates use hand-written types.
 
 ## Changing the framework
 
@@ -1003,5 +1136,5 @@ the code, and add a migration that drops the example tables.
 keep its public API small, and add a test for every behavior change. Apps
 should only need what `lib.rs` exports: `App`, `Rpc`, `Ctx`, `RpcResult`,
 `RpcError`, `ErrorCode`, `ensure!`, `Job`, `Jobs`, `enqueue`, `enqueue_with`,
-`EnqueueOptions`, `Cron`, `cpu`, `testing`, and the re-exported crates (`sqlx`,
+`EnqueueOptions`, `Cron`, `db`, `cpu`, `testing`, and the re-exported crates (`sqlx`,
 `axum`, `serde`, `chrono`, `uuid`, `ts_rs`, `tokio`, `tracing`).

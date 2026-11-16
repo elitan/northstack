@@ -1,17 +1,19 @@
-//! Durable background jobs stored in Postgres.
+//! Durable background jobs stored in the database.
 //!
 //! - Jobs are typed Rust structs implementing [`Job`]; the kind string is a
 //!   constant on the type, so a job can't be enqueued under a misspelled name.
 //! - [`enqueue`] takes any executor, so a job can be enqueued inside the same
 //!   transaction as the business write: both commit or neither does.
-//! - Workers claim jobs with `FOR UPDATE SKIP LOCKED`, so any number of
-//!   replicas can run workers without double-processing.
-//! - Each claim takes a lease (`Job::TIMEOUT`). If a replica crashes, the lease
-//!   expires and another worker retries the job.
+//! - Workers claim jobs with one atomic `UPDATE ... RETURNING`. SQLite runs one
+//!   write at a time, so a job is never claimed twice, even by several worker
+//!   loops or by two processes sharing the file during a deploy.
+//! - Each claim takes a lease (`Job::TIMEOUT`). If the process crashes, the
+//!   lease expires and a worker retries the job after the restart.
 //! - Failures retry with exponential backoff up to `Job::MAX_ATTEMPTS`, then
 //!   the job is marked `dead` and kept for inspection.
-//! - Enqueue sends `NOTIFY northstack_jobs` (delivered on commit) so idle workers
-//!   wake immediately; a slow poll is the fallback.
+//! - Enqueue wakes this process's idle workers right away. A short poll is the
+//!   fallback (a job enqueued in a transaction is visible only after commit,
+//!   and another process may have enqueued it).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -22,7 +24,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use sqlx::{PgExecutor, PgPool};
+use sqlx::{SqliteExecutor, SqlitePool};
 use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
@@ -56,7 +58,7 @@ pub struct EnqueueOptions {
 }
 
 /// Enqueue a job to run as soon as possible. Returns the job id.
-pub async fn enqueue<'e, J: Job>(db: impl PgExecutor<'e>, job: &J) -> sqlx::Result<i64> {
+pub async fn enqueue<'e, J: Job>(db: impl SqliteExecutor<'e>, job: &J) -> sqlx::Result<i64> {
     let id = enqueue_with(db, job, EnqueueOptions::default()).await?;
     Ok(id.expect("enqueue without run_key always inserts"))
 }
@@ -64,7 +66,7 @@ pub async fn enqueue<'e, J: Job>(db: impl PgExecutor<'e>, job: &J) -> sqlx::Resu
 /// Enqueue with options. Returns `None` if a job with the same `run_key`
 /// already exists.
 pub async fn enqueue_with<'e, J: Job>(
-    db: impl PgExecutor<'e>,
+    db: impl SqliteExecutor<'e>,
     job: &J,
     opts: EnqueueOptions,
 ) -> sqlx::Result<Option<i64>> {
@@ -73,7 +75,7 @@ pub async fn enqueue_with<'e, J: Job>(
 }
 
 pub(crate) async fn enqueue_raw<'e>(
-    db: impl PgExecutor<'e>,
+    db: impl SqliteExecutor<'e>,
     kind: &str,
     payload: serde_json::Value,
     max_attempts: i32,
@@ -82,24 +84,36 @@ pub(crate) async fn enqueue_raw<'e>(
 ) -> sqlx::Result<Option<i64>> {
     let row: Option<(i64,)> = sqlx::query_as(
         r#"
-        WITH ins AS (
-            INSERT INTO northstack_jobs (kind, payload, run_at, run_key, max_attempts, timeout_secs)
-            VALUES ($1, $2, COALESCE($3, now()), $4, $5, $6)
-            ON CONFLICT (run_key) WHERE run_key IS NOT NULL DO NOTHING
-            RETURNING id
-        )
-        SELECT ins.id FROM ins CROSS JOIN LATERAL (SELECT pg_notify('northstack_jobs', '')) AS n
+        INSERT INTO northstack_jobs (kind, payload, run_at, run_key, max_attempts, timeout_secs)
+        VALUES ($1, $2, COALESCE($3, strftime('%Y-%m-%dT%H:%M:%f+00:00')), $4, $5, $6)
+        ON CONFLICT (run_key) WHERE run_key IS NOT NULL DO NOTHING
+        RETURNING id
         "#,
     )
     .bind(kind)
-    .bind(payload)
+    .bind(payload.to_string())
     .bind(opts.run_at)
     .bind(opts.run_key)
     .bind(max_attempts.max(1))
     .bind(timeout.as_secs().clamp(1, i32::MAX as u64) as i32)
     .fetch_optional(db)
     .await?;
+    if row.is_some() {
+        wake_workers();
+    }
     Ok(row.map(|r| r.0))
+}
+
+/// Wakes idle workers in this process when a job is enqueued.
+static WAKE: Notify = Notify::const_new();
+
+/// Wake every idle worker loop in this process (there can be several, e.g.
+/// one per pool), and leave a permit for a loop that is busy claiming right
+/// now. `notify_one` alone could wake a loop on another pool and leave the
+/// right one asleep until its next poll.
+fn wake_workers() {
+    WAKE.notify_waiters();
+    WAKE.notify_one();
 }
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
@@ -165,7 +179,7 @@ impl<S: Clone + Send + Sync + 'static> Jobs<S> {
 
     /// Run all jobs that are ready now, one at a time, until none are left.
     /// Returns how many attempts were made. Intended for tests.
-    pub async fn run_pending(&self, pool: &PgPool, state: S) -> anyhow::Result<usize> {
+    pub async fn run_pending(&self, pool: &SqlitePool, state: S) -> anyhow::Result<usize> {
         let mut ran = 0;
         loop {
             let claimed = claim(pool, 1).await?;
@@ -177,7 +191,7 @@ impl<S: Clone + Send + Sync + 'static> Jobs<S> {
         }
     }
 
-    async fn execute(&self, pool: &PgPool, state: S, job: ClaimedJob) {
+    async fn execute(&self, pool: &SqlitePool, state: S, job: ClaimedJob) {
         let outcome: anyhow::Result<()> = if job.attempts > job.max_attempts {
             Err(anyhow::anyhow!(
                 "lease expired after final attempt (worker crashed or timed out)"
@@ -187,8 +201,19 @@ impl<S: Clone + Send + Sync + 'static> Jobs<S> {
             let span =
                 tracing::info_span!("job", id = job.id, kind = %job.kind, attempt = job.attempts);
             // Run in its own task so a panic is contained and reported.
+            let payload = match serde_json::from_str(&job.payload) {
+                Ok(p) => p,
+                Err(e) => {
+                    let msg = format!("payload is not valid JSON: {e}");
+                    if let Err(e) = mark_dead(pool, job.id, &msg).await {
+                        tracing::error!(error = %e, job_id = job.id, "failed to mark job dead");
+                    }
+                    tracing::error!(job_id = job.id, kind = %job.kind, "{msg}");
+                    return;
+                }
+            };
             let mut task = tokio::spawn(tracing::Instrument::instrument(
-                handler(state, job.payload.clone()),
+                handler(state, payload),
                 span,
             ));
             match tokio::time::timeout(timeout, &mut task).await {
@@ -243,29 +268,44 @@ pub fn backoff(attempt: i32) -> Duration {
 struct ClaimedJob {
     id: i64,
     kind: String,
-    payload: serde_json::Value,
+    payload: String,
     attempts: i32,
     max_attempts: i32,
     timeout_secs: i32,
 }
 
-async fn claim(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<ClaimedJob>> {
+async fn claim(pool: &SqlitePool, limit: i64) -> sqlx::Result<Vec<ClaimedJob>> {
+    // Cheap read first, so idle polling never takes the write lock.
+    let ready: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1 FROM northstack_jobs
+            WHERE (status = 'queued' AND run_at <= strftime('%Y-%m-%dT%H:%M:%f+00:00'))
+               OR (status = 'running' AND locked_until < strftime('%Y-%m-%dT%H:%M:%f+00:00'))
+        )
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    if !ready {
+        return Ok(Vec::new());
+    }
+    // One statement, so it is atomic: SQLite runs one write at a time.
     sqlx::query_as(
         r#"
-        UPDATE northstack_jobs j
+        UPDATE northstack_jobs
         SET status = 'running',
-            attempts = j.attempts + 1,
-            locked_until = now() + make_interval(secs => j.timeout_secs + 30),
-            updated_at = now()
-        WHERE j.id IN (
+            attempts = attempts + 1,
+            locked_until = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || (timeout_secs + 30) || ' seconds'),
+            updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00')
+        WHERE id IN (
             SELECT id FROM northstack_jobs
-            WHERE (status = 'queued' AND run_at <= now())
-               OR (status = 'running' AND locked_until < now())
+            WHERE (status = 'queued' AND run_at <= strftime('%Y-%m-%dT%H:%M:%f+00:00'))
+               OR (status = 'running' AND locked_until < strftime('%Y-%m-%dT%H:%M:%f+00:00'))
             ORDER BY run_at, id
             LIMIT $1
-            FOR UPDATE SKIP LOCKED
         )
-        RETURNING j.id, j.kind, j.payload, j.attempts, j.max_attempts, j.timeout_secs
+        RETURNING id, kind, payload, attempts, max_attempts, timeout_secs
         "#,
     )
     .bind(limit)
@@ -273,10 +313,11 @@ async fn claim(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<ClaimedJob>> {
     .await
 }
 
-async fn mark_done(pool: &PgPool, id: i64) -> sqlx::Result<()> {
+async fn mark_done(pool: &SqlitePool, id: i64) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE northstack_jobs SET status = 'done', locked_until = NULL, last_error = NULL,
-             finished_at = now(), updated_at = now()
+             finished_at = strftime('%Y-%m-%dT%H:%M:%f+00:00'),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00')
          WHERE id = $1",
     )
     .bind(id)
@@ -285,24 +326,26 @@ async fn mark_done(pool: &PgPool, id: i64) -> sqlx::Result<()> {
     .map(|_| ())
 }
 
-async fn mark_retry(pool: &PgPool, id: i64, error: &str, delay: Duration) -> sqlx::Result<()> {
+async fn mark_retry(pool: &SqlitePool, id: i64, error: &str, delay: Duration) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE northstack_jobs SET status = 'queued', locked_until = NULL, last_error = $2,
-             run_at = now() + make_interval(secs => $3), updated_at = now()
+             run_at = strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '+' || $3 || ' seconds'),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00')
          WHERE id = $1",
     )
     .bind(id)
     .bind(error)
-    .bind(delay.as_secs_f64())
+    .bind(delay.as_secs() as i64)
     .execute(pool)
     .await
     .map(|_| ())
 }
 
-async fn mark_dead(pool: &PgPool, id: i64, error: &str) -> sqlx::Result<()> {
+async fn mark_dead(pool: &SqlitePool, id: i64, error: &str) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE northstack_jobs SET status = 'dead', locked_until = NULL, last_error = $2,
-             finished_at = now(), updated_at = now()
+             finished_at = strftime('%Y-%m-%dT%H:%M:%f+00:00'),
+             updated_at = strftime('%Y-%m-%dT%H:%M:%f+00:00')
          WHERE id = $1",
     )
     .bind(id)
@@ -317,11 +360,8 @@ async fn mark_dead(pool: &PgPool, id: i64, error: &str) -> sqlx::Result<()> {
 pub struct WorkerConfig {
     /// Maximum jobs running at once in this process.
     pub concurrency: usize,
-    /// Fallback poll interval when no notification arrives.
+    /// Fallback poll interval when no wake-up arrives.
     pub poll_interval: Duration,
-    /// Use `LISTEN northstack_jobs` for instant wake-up. Disable when connecting
-    /// through PgBouncer in transaction mode (LISTEN needs a session).
-    pub listen: bool,
     /// Delete finished (`done`) jobs older than this.
     pub retention: Duration,
     /// How long to wait for running jobs on shutdown.
@@ -332,8 +372,7 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             concurrency: 8,
-            poll_interval: Duration::from_secs(2),
-            listen: true,
+            poll_interval: Duration::from_secs(1),
             retention: Duration::from_secs(7 * 24 * 3600),
             shutdown_grace: Duration::from_secs(30),
         }
@@ -342,7 +381,7 @@ impl Default for WorkerConfig {
 
 /// Run workers until `shutdown` is cancelled, then wait for running jobs.
 pub async fn run_workers<S: Clone + Send + Sync + 'static>(
-    pool: PgPool,
+    pool: SqlitePool,
     jobs: Arc<Jobs<S>>,
     state: S,
     config: WorkerConfig,
@@ -350,11 +389,6 @@ pub async fn run_workers<S: Clone + Send + Sync + 'static>(
 ) {
     let concurrency = config.concurrency.max(1);
     let permits = Arc::new(Semaphore::new(concurrency));
-    let wake = Arc::new(Notify::new());
-
-    if config.listen {
-        tokio::spawn(listen_loop(pool.clone(), wake.clone(), shutdown.clone()));
-    }
     tokio::spawn(cleanup_loop(
         pool.clone(),
         config.retention,
@@ -362,6 +396,9 @@ pub async fn run_workers<S: Clone + Send + Sync + 'static>(
     ));
     tracing::info!(concurrency, kinds = ?jobs.kinds(), "workers started");
 
+    // After a wake-up that found nothing, look again shortly: the job may have
+    // been enqueued in a transaction that hadn't committed yet.
+    let mut recheck: &[u64] = &[];
     loop {
         // Wait for at least one free slot.
         let first = tokio::select! {
@@ -384,6 +421,7 @@ pub async fn run_workers<S: Clone + Send + Sync + 'static>(
                     });
                 }
                 drop(held);
+                recheck = &[];
                 // There may be more ready work; loop immediately.
                 continue;
             }
@@ -392,8 +430,16 @@ pub async fn run_workers<S: Clone + Send + Sync + 'static>(
         }
         drop(held);
 
+        if let Some((&ms, rest)) = recheck.split_first() {
+            recheck = rest;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(ms)) => {}
+                _ = shutdown.cancelled() => break,
+            }
+            continue;
+        }
         tokio::select! {
-            _ = wake.notified() => {}
+            _ = WAKE.notified() => recheck = &[20, 100, 400],
             _ = tokio::time::sleep(config.poll_interval) => {}
             _ = shutdown.cancelled() => break,
         }
@@ -411,33 +457,7 @@ pub async fn run_workers<S: Clone + Send + Sync + 'static>(
     }
 }
 
-async fn listen_loop(pool: PgPool, wake: Arc<Notify>, shutdown: CancellationToken) {
-    loop {
-        let result: sqlx::Result<()> = async {
-            let mut listener = sqlx::postgres::PgListener::connect_with(&pool).await?;
-            listener.listen("northstack_jobs").await?;
-            loop {
-                tokio::select! {
-                    n = listener.recv() => { n?; wake.notify_one(); }
-                    _ = shutdown.cancelled() => return Ok(()),
-                }
-            }
-        }
-        .await;
-        match result {
-            Ok(()) => return,
-            Err(e) => {
-                tracing::warn!(error = %e, "job listener disconnected; falling back to polling and retrying");
-                tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(5)) => {}
-                    _ = shutdown.cancelled() => return,
-                }
-            }
-        }
-    }
-}
-
-async fn cleanup_loop(pool: PgPool, retention: Duration, shutdown: CancellationToken) {
+async fn cleanup_loop(pool: SqlitePool, retention: Duration, shutdown: CancellationToken) {
     let mut tick = tokio::time::interval(Duration::from_secs(3600));
     loop {
         tokio::select! {
@@ -445,9 +465,10 @@ async fn cleanup_loop(pool: PgPool, retention: Duration, shutdown: CancellationT
             _ = shutdown.cancelled() => return,
         }
         let res = sqlx::query(
-            "DELETE FROM northstack_jobs WHERE status = 'done' AND finished_at < now() - make_interval(secs => $1)",
+            "DELETE FROM northstack_jobs WHERE status = 'done'
+               AND finished_at < strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now', '-' || $1 || ' seconds')",
         )
-        .bind(retention.as_secs_f64())
+        .bind(retention.as_secs() as i64)
         .execute(&pool)
         .await;
         match res {

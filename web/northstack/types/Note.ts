@@ -6,10 +6,10 @@ import type { NotePriority } from "./NotePriority";
  */
 export type Note = { id: string, title: string, body: string, done: boolean, 
 /**
- * Computed in the background after create/update; null until then.
- */
-wordCount: number | null, createdAt: string, updatedAt: string, 
-/**
  * How important the note is. Sorted high to low in lists.
  */
-priority: NotePriority, };
+priority: NotePriority, 
+/**
+ * Computed in the background after create/update; null until then.
+ */
+wordCount: number | null, createdAt: string, updatedAt: string, };

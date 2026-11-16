@@ -1,13 +1,10 @@
 {
-  "db_name": "PostgreSQL",
+  "db_name": "SQLite",
   "query": "UPDATE notes SET word_count = $2 WHERE id = $1",
   "describe": {
     "columns": [],
     "parameters": {
-      "Left": [
-        "Uuid",
-        "Int4"
-      ]
+      "Right": 2
     },
     "nullable": []
   },

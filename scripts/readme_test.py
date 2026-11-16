@@ -11,7 +11,7 @@
               <!-- readme-test: migration <name> -->    `just migration <name>`, write the block to it
               <!-- readme-test: write <path> -->        write the block to <path>
 
-The copy uses its own database (`<your db>_readme_test`) and shares `target/`
+The copy uses its own database (data/dev.db inside the copy) and shares `target/`
 across runs (target/readme-test), so it doesn't touch your data and recompiles
 incrementally without invalidating your main build.
 """
@@ -26,7 +26,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -83,15 +82,8 @@ def check_paths() -> None:
 # --- 2 + 3. walkthrough in a temporary copy -----------------------------------
 
 def database_url() -> str:
-    url = os.environ.get("DATABASE_URL")
-    if not url and (ROOT / ".env").exists():
-        for line in (ROOT / ".env").read_text().splitlines():
-            if line.startswith("DATABASE_URL="):
-                url = line.split("=", 1)[1].strip()
-    if not url:
-        fail("setup", "DATABASE_URL is not set", "Run 'just dev' (creates .env and starts Postgres) or set DATABASE_URL.")
-    parts = urlsplit(url)
-    return urlunsplit(parts._replace(path=parts.path.rstrip("/") + "_readme_test"))
+    # Relative to the temporary copy, so it is a separate database file.
+    return "sqlite:data/dev.db"
 
 
 def copy_repo(dest: Path) -> None:

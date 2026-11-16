@@ -1,12 +1,12 @@
 {
-  "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO notes (title, body, priority) VALUES ($1, $2, $3)\n        RETURNING id, title, body, done, word_count, created_at, updated_at,\n                  priority AS \"priority: NotePriority\"\n        ",
+  "db_name": "SQLite",
+  "query": "\n        SELECT id, title, body, done, priority, word_count, created_at, updated_at\n        FROM notes WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
-        "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid",
+        "ordinal": 0,
+        "type_info": "Null",
         "origin": {
           "Table": {
             "table": "notes",
@@ -15,8 +15,8 @@
         }
       },
       {
-        "ordinal": 1,
         "name": "title",
+        "ordinal": 1,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -26,8 +26,8 @@
         }
       },
       {
-        "ordinal": 2,
         "name": "body",
+        "ordinal": 2,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -37,8 +37,8 @@
         }
       },
       {
-        "ordinal": 3,
         "name": "done",
+        "ordinal": 3,
         "type_info": "Bool",
         "origin": {
           "Table": {
@@ -48,9 +48,20 @@
         }
       },
       {
+        "name": "priority",
         "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notes",
+            "name": "priority"
+          }
+        }
+      },
+      {
         "name": "word_count",
-        "type_info": "Int4",
+        "ordinal": 5,
+        "type_info": "Integer",
         "origin": {
           "Table": {
             "table": "notes",
@@ -59,9 +70,9 @@
         }
       },
       {
-        "ordinal": 5,
         "name": "created_at",
-        "type_info": "Timestamptz",
+        "ordinal": 6,
+        "type_info": "Datetime",
         "origin": {
           "Table": {
             "table": "notes",
@@ -70,67 +81,30 @@
         }
       },
       {
-        "ordinal": 6,
         "name": "updated_at",
-        "type_info": "Timestamptz",
+        "ordinal": 7,
+        "type_info": "Datetime",
         "origin": {
           "Table": {
             "table": "notes",
             "name": "updated_at"
           }
         }
-      },
-      {
-        "ordinal": 7,
-        "name": "priority: NotePriority",
-        "type_info": {
-          "Custom": {
-            "name": "note_priority",
-            "kind": {
-              "Enum": [
-                "low",
-                "normal",
-                "high"
-              ]
-            }
-          }
-        },
-        "origin": {
-          "Table": {
-            "table": "notes",
-            "name": "priority"
-          }
-        }
       }
     ],
     "parameters": {
-      "Left": [
-        "Text",
-        "Text",
-        {
-          "Custom": {
-            "name": "note_priority",
-            "kind": {
-              "Enum": [
-                "low",
-                "normal",
-                "high"
-              ]
-            }
-          }
-        }
-      ]
+      "Right": 1
     },
     "nullable": [
       false,
       false,
       false,
       false,
-      true,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "9b2ffd9df36076a5865f61946cb1245873669934864ef68e1b2256813a91e23f"
+  "hash": "3fa1d55fb7c081d335ba1dfd638e71067ca7ea7948b88479034462fcbcd03cad"
 }

@@ -1,0 +1,42 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT\n            count(*)                                      AS \"total!: i64\",\n            count(*) FILTER (WHERE done)                  AS \"done!: i64\",\n            COALESCE(sum(word_count), 0)                  AS \"words!: i64\",\n            (SELECT max(day) FROM note_digests)           AS \"last_digest_day: chrono::NaiveDate\"\n        FROM notes\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "done!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "words!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "last_digest_day: chrono::NaiveDate",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a16a722ffa1bbaaf34b2f806969561f2a65f95a3af2af714097c798caca4a756"
+}

@@ -67,11 +67,11 @@ step migrate \
   northstack migrate
 
 step gen-db \
-  "Rust types are generated from Postgres into server/src/db/schema.rs. In CI: run 'just check' locally and commit the file. For unsupported types, change the column type." \
+  "Rust types are generated from the database into server/src/db/schema.rs (and column types for the sqlx macros into server/sqlx.toml). In CI: run 'just check' locally and commit both. For unsupported types, change the column's declared type." \
   northstack gen-db $CI_FLAG
 
 step compile \
-  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in server/src/db/schema.rs. Custom enum columns need 'col AS \"col: EnumType\"' in SELECT and 'value as EnumType' for parameters." \
+  "Fix the errors above. 'error returned from database' means a query doesn't match the schema; the current schema is in server/src/db/schema.rs. 'no built-in mapping found' means a computed column (count, sum, CASE, a subquery) needs its type: 'count(*) AS \"total!: i64\"' (! = never null)." \
   cargo build -q -p server --bin app --message-format short
 
 step gen-ts \

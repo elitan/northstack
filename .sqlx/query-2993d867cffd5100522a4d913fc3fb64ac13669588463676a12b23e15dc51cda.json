@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO note_digests (day, total, done, words)\n        SELECT $1, count(*), count(*) FILTER (WHERE done), COALESCE(sum(word_count), 0)\n        FROM notes WHERE created_at < date($1, '+1 day')\n        ON CONFLICT (day) DO UPDATE\n            SET total = excluded.total, done = excluded.done, words = excluded.words,\n                created_at = strftime('%Y-%m-%dT%H:%M:%f+00:00')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2993d867cffd5100522a4d913fc3fb64ac13669588463676a12b23e15dc51cda"
+}

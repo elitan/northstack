@@ -1,21 +1,21 @@
-//! Scheduled jobs that are safe to run on every replica.
+//! Scheduled jobs.
 //!
-//! A cron entry never does work itself. At each scheduled time, every replica
-//! tries to enqueue a job with the idempotency key `cron:{name}:{timestamp}`.
-//! The unique index lets exactly one insert succeed, and a normal worker runs
-//! the job with retries and logging. No leader election needed.
+//! A cron entry never does work itself. At each scheduled time it enqueues a
+//! job with the idempotency key `cron:{name}:{timestamp}`, and a normal worker
+//! runs it with retries and logging. The unique key means a slot runs once
+//! even when two processes are up at the same time (e.g. during a deploy).
 //!
 //! Expressions use the `cron` crate syntax with a seconds field, in UTC:
 //! `"0 0 3 * * *"` = every day at 03:00:00 UTC.
 //!
-//! If every replica is down at a scheduled time, that run is skipped.
+//! If the app is down (or asleep) at a scheduled time, that run is skipped.
 
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::SqlitePool;
 use tokio_util::sync::CancellationToken;
 
 use crate::jobs::{EnqueueOptions, Job, enqueue_raw};
@@ -90,7 +90,12 @@ impl Cron {
 
     /// Enqueue the run for `name` scheduled at `at`, exactly as the scheduler
     /// would. Returns whether this call inserted it. Useful in tests.
-    pub async fn fire(&self, pool: &PgPool, name: &str, at: DateTime<Utc>) -> anyhow::Result<bool> {
+    pub async fn fire(
+        &self,
+        pool: &SqlitePool,
+        name: &str,
+        at: DateTime<Utc>,
+    ) -> anyhow::Result<bool> {
         let entry = self
             .entries
             .iter()
@@ -100,7 +105,7 @@ impl Cron {
     }
 
     /// Run the scheduler until `shutdown` is cancelled.
-    pub async fn run(self, pool: PgPool, shutdown: CancellationToken) {
+    pub async fn run(self, pool: SqlitePool, shutdown: CancellationToken) {
         if self.entries.is_empty() {
             return;
         }
@@ -118,7 +123,7 @@ impl Cron {
                     }
                     match fire_entry(&pool, &entry, next).await {
                         Ok(true) => tracing::info!(cron = entry.name, at = %next, "cron enqueued"),
-                        Ok(false) => tracing::debug!(cron = entry.name, at = %next, "cron already enqueued by another replica"),
+                        Ok(false) => tracing::debug!(cron = entry.name, at = %next, "cron already enqueued by another process"),
                         Err(e) => tracing::error!(cron = entry.name, error = %e, "cron enqueue failed"),
                     }
                     // Make sure we move past this slot even with clock jitter.
@@ -132,7 +137,7 @@ impl Cron {
     }
 }
 
-async fn fire_entry(pool: &PgPool, entry: &Entry, at: DateTime<Utc>) -> anyhow::Result<bool> {
+async fn fire_entry(pool: &SqlitePool, entry: &Entry, at: DateTime<Utc>) -> anyhow::Result<bool> {
     let key = format!("cron:{}:{}", entry.name, at.timestamp());
     let inserted = enqueue_raw(
         pool,

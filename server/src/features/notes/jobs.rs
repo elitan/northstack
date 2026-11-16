@@ -25,7 +25,7 @@ pub async fn analyze_note(state: AppState, job: AnalyzeNote) -> anyhow::Result<(
     };
     // CPU-bound work goes to the CPU pool, never directly on the async runtime.
     let words = northstack::cpu::spawn(move || note.body.split_whitespace().count()).await?;
-    db::set_word_count(&state.db, job.note_id, words.try_into().unwrap_or(i32::MAX)).await?;
+    db::set_word_count(&state.db, job.note_id, words.try_into().unwrap_or(i64::MAX)).await?;
     Ok(())
 }
 

@@ -1,13 +1,14 @@
 //! # northstack
 //!
 //! A small, explicit framework for single-binary web apps:
-//! Rust (axum + sqlx/Postgres) on the server, React + TypeScript in the
+//! Rust (axum + sqlx/SQLite) on the server, React + TypeScript in the
 //! browser, with generated types in between.
 //!
 //! - [`Rpc`]: type-safe procedures, served as `POST /rpc/{name}`
 //! - [`codegen`]: generates the TypeScript client + TanStack Query hooks
-//! - [`jobs`]: durable Postgres job queue, safe across replicas
-//! - [`cron`]: scheduled jobs, safe across replicas
+//! - [`db`]: the SQLite database (connection settings, transactions, time format)
+//! - [`jobs`]: durable job queue in the database
+//! - [`cron`]: scheduled jobs
 //! - [`cpu`]: thread pool for CPU-heavy work
 //! - [`App`]: one binary with `all | serve | worker | migrate | gen-ts` modes
 
@@ -15,6 +16,7 @@ pub mod app;
 pub mod codegen;
 pub mod cpu;
 pub mod cron;
+pub mod db;
 pub mod error;
 pub mod jobs;
 pub mod rpc;

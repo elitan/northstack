@@ -1,0 +1,5 @@
+# SQLite: a transaction from `pool.begin()` (BEGIN DEFERRED) that reads and then
+# writes fails with "database is locked" when another write happens in between.
+disallowed-methods = [
+  { path = "sqlx::Pool::begin", reason = "use northstack::db::begin(&pool) (BEGIN IMMEDIATE), see crates/northstack/src/db.rs" },
+]
