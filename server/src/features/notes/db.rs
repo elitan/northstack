@@ -25,7 +25,7 @@ pub async fn list(
           AND ($2 IS NULL OR done = $2)
         -- Same expressions as the notes_list index, so no sort is needed.
         ORDER BY CASE priority WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END DESC,
-                 created_at DESC
+                 created_at DESC, id DESC
         LIMIT $3
         "#,
         search,

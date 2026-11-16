@@ -13,11 +13,14 @@ CREATE TABLE notes ( -- A note written by a user.
     updated_at  TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f+00:00'))
 );
 
--- notes.list sorts by priority (high first), then newest. An index with the
--- same expressions lets SQLite read rows in order instead of sorting the table.
+-- notes.list sorts by priority (high first), then newest; id breaks ties
+-- between notes created in the same millisecond (v7 UUIDs grow over time).
+-- An index with the same expressions lets SQLite read rows in order instead
+-- of sorting the table.
 CREATE INDEX notes_list ON notes (
     (CASE priority WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END) DESC,
-    created_at DESC
+    created_at DESC,
+    id DESC
 );
 
 CREATE TABLE note_digests ( -- Daily statistics, written by the notes.daily_digest cron job.

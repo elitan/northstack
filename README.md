@@ -930,9 +930,12 @@ CREATE TABLE people ( -- Someone with an account. @name(Person)
   and sorts the whole table on each request (with 1,000 rows, a 200-row list
   went from 0.6 ms to 0.04 ms with the index). An index can hold the same
   expression: `CREATE INDEX notes_list ON notes ((CASE priority WHEN 'high'
-  THEN 2 ... END) DESC, created_at DESC)` (example:
+  THEN 2 ... END) DESC, created_at DESC, id DESC)` (example:
   `server/migrations/20261108000001_notes.sql`). Check with `EXPLAIN QUERY
   PLAN`: "USE TEMP B-TREE FOR ORDER BY" means a sort.
+- End an `ORDER BY` on a unique column (`created_at DESC, id DESC`). Rows
+  written in the same millisecond have equal times, and without a tiebreaker
+  their order is arbitrary.
 - Take `impl SqliteExecutor<'e>` instead of `&SqlitePool` when the query must
   also work inside a transaction (`&mut *tx`).
 - Start transactions with `northstack::db::begin(&ctx.state.db)`, never

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n        SELECT id, title, body, done, priority, word_count, created_at, updated_at\n        FROM notes\n        WHERE ($1 IS NULL OR title LIKE '%' || $1 || '%' OR body LIKE '%' || $1 || '%')\n          AND ($2 IS NULL OR done = $2)\n        -- Same expressions as the notes_list index, so no sort is needed.\n        ORDER BY CASE priority WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END DESC,\n                 created_at DESC\n        LIMIT $3\n        ",
+  "query": "\n        SELECT id, title, body, done, priority, word_count, created_at, updated_at\n        FROM notes\n        WHERE ($1 IS NULL OR title LIKE '%' || $1 || '%' OR body LIKE '%' || $1 || '%')\n          AND ($2 IS NULL OR done = $2)\n        -- Same expressions as the notes_list index, so no sort is needed.\n        ORDER BY CASE priority WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END DESC,\n                 created_at DESC, id DESC\n        LIMIT $3\n        ",
   "describe": {
     "columns": [
       {
@@ -106,5 +106,5 @@
       false
     ]
   },
-  "hash": "14f58ec5a0ec53edc723adc3616824d9dfa7d789fa999176bda52661ec692f85"
+  "hash": "547884de470bc3aff3d1f89c30141bc1d875f7050c15a825c16dbaf8d1dfa052"
 }

@@ -24,7 +24,7 @@
       {
         "name": "last_digest_day: chrono::NaiveDate",
         "ordinal": 3,
-        "type_info": "Text",
+        "type_info": "Date",
         "origin": "Expression"
       }
     ],

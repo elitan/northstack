@@ -87,6 +87,28 @@ async fn list_filters() {
     assert_eq!(limited.notes[0].title, "Gamma", "newest first");
 }
 
+/// Notes created in the same millisecond have equal `created_at`; the list
+/// still shows the newest first (ties broken by the v7 id).
+#[tokio::test]
+async fn list_order_is_stable_for_equal_times() {
+    let (db, client) = setup().await;
+    for title in ["First", "Second", "Third"] {
+        create(&client, title, "").await;
+    }
+    sqlx::query("UPDATE notes SET created_at = '2026-01-01T00:00:00.000+00:00'")
+        .execute(&*db)
+        .await
+        .unwrap();
+    let list: ListNotesOutput = client.call("notes.list", &json!({})).await.unwrap();
+    assert_eq!(
+        list.notes
+            .iter()
+            .map(|n| n.title.as_str())
+            .collect::<Vec<_>>(),
+        ["Third", "Second", "First"]
+    );
+}
+
 #[tokio::test]
 async fn validation_errors() {
     let (_db, client) = setup().await;
