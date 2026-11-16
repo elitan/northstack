@@ -1,58 +1,116 @@
-# Release: push a tag `v<version>` (matching crates/northstack/Cargo.toml) and
-# this checks everything, publishes the crate to crates.io and creates the
-# GitHub release. Framework-only: not copied into apps.
+# Release: runs on every push to main and releases when the crate's version
+# (crates/northstack/Cargo.toml) has a changelog section but no `v<version>`
+# tag yet, i.e. when a release PR from `python3 scripts/release.py` merges.
+# Framework-only: not copied into apps.
 #
-# Publishing uses crates.io trusted publishing (no token in the repository):
-# after the first manual publish, add this repository and workflow
-# (release.yml) under the crate's Settings -> Trusted Publishing on crates.io.
+# 1. plan:     what's left for this version: tag, crates.io, GitHub release.
+# 2. checks:   ci.yml and framework.yml on the commit (new releases only).
+# 3. publish:  tag the commit, `cargo publish`, create the GitHub release with
+#              the changelog section as notes. Each step is skipped when it's
+#              already done, so re-running a failed release finishes it.
+#
+# crates.io auth: trusted publishing (no secret) once it's set up for this
+# repository on crates.io; until then, a CARGO_REGISTRY_TOKEN repository secret.
 name: release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
 
-# One release at a time.
+# One release at a time; never cancel one halfway.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  # Fail in seconds on a tag that doesn't match the crate or has no changelog.
-  notes:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
+      tagged: ${{ steps.plan.outputs.tagged }}
+      published: ${{ steps.plan.outputs.published }}
+      github_release: ${{ steps.plan.outputs.github_release }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
-      - uses: actions/upload-artifact@v4
         with:
-          name: release-notes
-          path: release-notes.md
+          fetch-depth: 0
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^version = ' crates/northstack/Cargo.toml | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if ! python3 scripts/release_notes.py "v$version" >/dev/null 2>&1; then
+            echo "$version has no changelog section: not a release"
+            echo "release=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          tagged=false; sha=$GITHUB_SHA
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            tagged=true; sha=$(git rev-list -n1 "v$version")
+          fi
+          published=false
+          code=$(curl -s -o /dev/null -w '%{http_code}' -A "northstack release workflow (github.com/elitan/northstack)" \
+            "https://crates.io/api/v1/crates/northstack/$version")
+          [ "$code" = 200 ] && published=true
+          github_release=false
+          gh release view "v$version" >/dev/null 2>&1 && github_release=true
+          release=true
+          [ $tagged = true ] && [ $published = true ] && [ $github_release = true ] && release=false
+          echo "v$version: tagged=$tagged published=$published github_release=$github_release -> release=$release"
+          { echo "tagged=$tagged"; echo "published=$published"; echo "github_release=$github_release"
+            echo "release=$release"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
 
+  # Full checks before anything is tagged (a re-run of a tagged release skips them).
   ci:
-    needs: notes
+    needs: plan
+    if: needs.plan.outputs.release == 'true' && needs.plan.outputs.tagged == 'false'
     uses: ./.github/workflows/ci.yml
 
   framework:
-    needs: notes
+    needs: plan
+    if: needs.plan.outputs.release == 'true' && needs.plan.outputs.tagged == 'false'
     uses: ./.github/workflows/framework.yml
 
   publish:
-    needs: [ci, framework]
+    needs: [plan, ci, framework]
+    # Run when releasing and the checks passed or were skipped (tagged already).
+    if: >-
+      always() && needs.plan.outputs.release == 'true' &&
+      needs.ci.result != 'failure' && needs.ci.result != 'cancelled' &&
+      needs.framework.result != 'failure' && needs.framework.result != 'cancelled'
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      contents: write # create the GitHub release
+      contents: write # push the tag, create the GitHub release
       id-token: write # trusted publishing to crates.io
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      HAS_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/download-artifact@v4
         with:
-          name: release-notes
-      - uses: rust-lang/crates-io-auth-action@v1
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tag
+        if: needs.plan.outputs.tagged == 'false'
+        run: |
+          git tag "v$VERSION" "${{ needs.plan.outputs.sha }}"
+          git push origin "v$VERSION"
+      - name: crates.io auth (trusted publishing)
+        if: needs.plan.outputs.published == 'false' && env.HAS_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      - run: cargo publish -p northstack --locked
+      - name: Publish
+        if: needs.plan.outputs.published == 'false'
+        run: cargo publish -p northstack --locked
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+      - name: GitHub release
+        if: needs.plan.outputs.github_release == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_notes.py "v$VERSION" > release-notes.md
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file release-notes.md --verify-tag

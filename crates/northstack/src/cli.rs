@@ -644,7 +644,8 @@ fn version_key(v: &str) -> (u64, u64, u64, bool) {
     )
 }
 
-/// The changelog sections for versions after `from`, up to and including `to`.
+/// The changelog sections for versions after `from`, up to and including `to`
+/// (never "Unreleased").
 fn upgrade_notes(changelog: &str, from: &str, to: &str) -> Vec<String> {
     let (from, to) = (version_key(from), version_key(to));
     changelog
@@ -653,7 +654,7 @@ fn upgrade_notes(changelog: &str, from: &str, to: &str) -> Vec<String> {
         .filter(|section| {
             let version = section.split_whitespace().next().unwrap_or("");
             let key = version_key(version);
-            key > from && key <= to
+            version.starts_with(|c: char| c.is_ascii_digit()) && key > from && key <= to
         })
         .map(|section| format!("## {}", section.trim_end()))
         .collect()
@@ -830,18 +831,18 @@ lto = "thin"
 
     #[test]
     fn upgrade_notes_cover_skipped_versions() {
-        let log =
-            "# Changelog\n\nintro\n\n## 0.3.0\n\nthree\n\n## 0.2.0\n\ntwo\n\n## 0.1.0\n\none\n";
+        let log = "# Changelog\n\nintro\n\n## Unreleased\n\nnext\n\n## 0.3.0\n\nthree\n\n## 0.2.0\n\ntwo\n\n## 0.1.0\n\none\n";
         assert_eq!(
             upgrade_notes(log, "0.1.0", "0.3.0"),
             ["## 0.3.0\n\nthree", "## 0.2.0\n\ntwo"]
         );
         assert_eq!(upgrade_notes(log, "0.2.0", "0.2.0"), Vec::<String>::new());
-        // The real changelog parses and has this version.
+        assert_eq!(upgrade_notes(log, "0.0.0", "9.0.0").len(), 3);
+        // The real changelog parses; released versions are all numbered.
         assert!(
             upgrade_notes(CHANGELOG, "0.0.0", VERSION)
                 .iter()
-                .any(|s| s.starts_with(&format!("## {VERSION}")))
+                .all(|s| !s.starts_with("## Unreleased"))
         );
     }
 

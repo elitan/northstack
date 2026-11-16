@@ -2,10 +2,13 @@
 
 Every release of northstack. `just upgrade` prints the sections for all the
 versions it moves an app past, so each one says exactly what an app must
-change, under **Upgrade**, as steps an agent can follow. A release with nothing
-to change says so.
+change, under **Upgrade**, as steps an agent can follow.
 
-## 0.1.0
+Every change that affects apps adds a line under **Unreleased** in the same
+pull request (CI checks this). A release turns **Unreleased** into the new
+version's section (`python3 scripts/release.py`).
+
+## Unreleased
 
 First release: the Rust server (RPC, background jobs, cron, SQLite), the React
 frontend with folder routing and generated types, and the `northstack` CLI

@@ -30,6 +30,45 @@ it, removes the example, then runs the guide's "Building a feature" walkthrough
 exactly as written (the `<!-- guide-test: ... -->` markers) and `just verify`
 on the result. It also checks that every path the docs mention exists.
 
+## Shipping a change
+
+The human prompts; you do the whole flow. Every change goes through a pull
+request, never straight to `main`:
+
+1. Branch from an up-to-date `main` (`git switch main && git pull && git switch -c <topic>`).
+2. Make the change, with tests. If it reaches apps (see "The changelog"), add
+   its line under `## Unreleased` in `crates/northstack/CHANGELOG.md` in the
+   same PR.
+3. `just verify` passes (plus `just e2e` / `python3 scripts/guide_test.py` when
+   they apply). Commit, push, `gh pr create`.
+4. Wait for CI: `gh pr checks <number> --watch`. If it fails, read the log
+   (`gh run view <run-id> --log-failed`), fix, push, repeat. Never merge red.
+5. Merge when CI is green and the human asked for the change to land:
+   `gh pr merge <number> --squash --delete-branch`.
+
+Never: push to `main` directly, force-push `main`, rewrite or delete a `v*`
+tag, run `cargo publish` by hand, or skip a failing check. If something needs
+one of these, stop and ask the human.
+
+## The changelog
+
+`crates/northstack/CHANGELOG.md` is what app agents read when they upgrade
+(`just upgrade` prints it), so write it for them:
+
+- A change **reaches apps** if it touches the crate (`crates/northstack/`, not
+  its tests) or a file `northstack new` copies that the framework keeps
+  maintaining (`justfile`, `Dockerfile`, `.github/workflows/ci.yml`, `cli/`,
+  `web/` config, ...; the list is `APP_FILES` in `scripts/changelog_check.py`).
+  It needs a line under `## Unreleased`: what changed, then `**Upgrade:**`
+  with the exact steps an app needs ("rename `x` to `y` in
+  `server/src/features/*/procedures.rs`", "copy this block into your
+  Dockerfile"), or `**Upgrade:** nothing to do.`
+- Changes to tests, docs, benchmarks or the example feature need nothing. A
+  pure refactor of the crate with no visible effect: label the PR `no changelog`.
+- Released sections never change.
+
+CI (`framework.yml`, job `changelog`) enforces all three.
+
 ## The framework
 
 ```
@@ -55,7 +94,9 @@ crates/northstack/
   GUIDE.md                The guide; apps get it as docs/northstack.md
   CHANGELOG.md            Every release, with upgrade steps; `just upgrade` prints them
 scripts/guide_test.py     Tests `northstack new` and the guide (see above)
+scripts/release.py        Opens a release PR (see "Releasing a version")
 scripts/release_notes.py  Checks a release tag and prints its changelog section
+scripts/changelog_check.py CI: changelog lines for changes that reach apps
 .github/workflows/        ci.yml (also copied into apps), framework.yml, release.yml
 bench/                    Benchmark against Next.js + Postgres (bench/README.md)
 ```
@@ -76,33 +117,46 @@ should only need what `lib.rs` exports: `App`, `Rpc`, `Ctx`, `RpcResult`,
 `EnqueueOptions`, `Cron`, `db`, `cpu`, `testing`, and the re-exported crates
 (`sqlx`, `axum`, `serde`, `chrono`, `uuid`, `ts_rs`, `tokio`, `tracing`).
 
-Every change an app has to react to (a renamed API, a new required file, a
-changed command) goes in `CHANGELOG.md` under the next version's **Upgrade**
-heading, as exact steps an agent can follow in an app.
+Prefer changes apps don't have to react to. When one is worth it (a renamed
+API, a new required file, a changed command), its `**Upgrade:**` steps in the
+changelog must be complete enough that an agent in an app can follow them
+without reading this repository.
 
 ## Releasing a version
 
-1. Set the version in `crates/northstack/Cargo.toml` and add its section to
-   `crates/northstack/CHANGELOG.md` (what changed, and the **Upgrade** steps,
-   or "nothing to do"). Check both with
-   `python3 scripts/release_notes.py v<version>`.
-2. `just verify`, `just e2e` and `python3 scripts/guide_test.py` pass. Commit
-   and merge to `main`.
-3. Tag the merged commit and push the tag:
-   `git tag v<version> && git push origin v<version>`.
+When the human asks for a release ("release", "ship a new version"):
 
-The tag starts `.github/workflows/release.yml`: it checks the tag matches the
-crate and has a changelog section, runs `ci.yml` and `framework.yml`, publishes
-the crate to crates.io (trusted publishing, no token) and creates the GitHub
-release with the changelog section as notes. `northstack new` downloads the
-template from the tag, so the tag always exists before the crate does.
+1. Pick the bump from `## Unreleased`: any `**Upgrade:**` step that asks apps
+   to change something makes it `minor` before 1.0 (`major` after);
+   otherwise `patch`. (The first release is the crate's current version,
+   whatever you pass.)
+2. On a clean, up-to-date `main`: `python3 scripts/release.py <patch|minor|major>`.
+   It refuses an empty `Unreleased` and a patch with upgrade steps, moves
+   `Unreleased` into the new version's section, bumps the crate version and
+   opens the PR `Release v<version>`.
+3. Wait for its CI and merge it (`gh pr checks <n> --watch`,
+   `gh pr merge <n> --squash --delete-branch`).
+4. The merge starts `.github/workflows/release.yml` on `main`: all checks on
+   the merged commit, then the `v<version>` tag, `cargo publish`, and the
+   GitHub release with the changelog section as notes. Watch it:
+   `gh run list --workflow release.yml --limit 1`, then `gh run watch <id>`.
+5. Confirm: `gh release view v<version>` and `cargo search northstack --limit 1`
+   show the version. Report both links to the human.
 
-If the workflow fails before publishing, fix it on `main`, then move the tag:
-`git tag -f v<version> && git push -f origin v<version>`. Once a version is on
-crates.io it can't be replaced; release a new patch version instead.
+If the release workflow fails, read the log, fix the cause on `main` through a
+normal PR, then re-run it (`gh workflow run release.yml`). It continues where it
+stopped: it skips the checks once the version is tagged, and every step that's
+already done. A published version can't be replaced; ship a new patch instead.
 
-**First release only** (trusted publishing needs the crate to exist): publish
-0.1.0 by hand, `cargo login` then `cargo publish -p northstack`, after pushing
-the `v0.1.0` tag. Then on crates.io, under the crate's Settings -> Trusted
-Publishing, add repository `elitan/northstack`, workflow `release.yml`,
-environment `release`.
+**crates.io access (the human, once).** The workflow publishes with a
+`CARGO_REGISTRY_TOKEN` repository secret until crates.io trusted publishing is
+set up for this repository; then it needs no secret. If the publish step fails
+with an authentication error, stop and ask the human to do one of these:
+
+- create a crates.io API token (scopes `publish-new`, `publish-update`, crate
+  `northstack`) and run `gh secret set CARGO_REGISTRY_TOKEN --repo elitan/northstack`;
+- or, once the crate exists, add trusted publishing on crates.io (crate
+  settings: repository `elitan/northstack`, workflow `release.yml`,
+  environment `release`) and delete the secret.
+
+Never ask for the token in chat or handle it yourself.
