@@ -68,8 +68,8 @@ needs one of these, stop and ask the human.
   `server/src/features/*/procedures.rs`", "copy this block into your
   Dockerfile"), or `**Upgrade:** nothing to do.`
 - Changes to tests, docs, benchmarks or the example feature need nothing. A
-  pure refactor of the crate with no visible effect: put `[no changelog]` in
-  the commit message.
+  pure refactor of the crate with no visible effect: add a line
+  `[no changelog]` to the commit message.
 - Released sections never change.
 
 CI (`framework.yml`, job `changelog`) fails a push to `main` or a PR that

@@ -6,8 +6,8 @@ pushes to main and on pull requests.
 
 "Something apps get": the framework crate (not its tests), or a template file
 apps keep a copy of (APP_FILES). Tests, docs, benchmarks and the example
-feature need nothing. A pure refactor can skip the check with `[no changelog]`
-in one of the commit messages.
+feature need nothing. A pure refactor can skip the check with a line that
+is exactly `[no changelog]` in one of the commit messages.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def main(base: str) -> int:
     messages = subprocess.run(
         ["git", "log", "--format=%B", f"{base}..HEAD"], capture_output=True, text=True, check=True
     ).stdout
-    if "[no changelog]" in messages:
+    if any(line.strip() == "[no changelog]" for line in messages.splitlines()):
         print("changelog check skipped ([no changelog] in a commit message)")
         return 0
     if reaching and CHANGELOG not in changed:
@@ -52,7 +52,7 @@ def main(base: str) -> int:
             + "\n  ".join(reaching)
             + "\n\nAdd a line under '## Unreleased': what changed, then '**Upgrade:**' with the "
             "steps an agent follows in an app (or '**Upgrade:** nothing to do.'). If nothing "
-            "reaches apps (a pure refactor), put '[no changelog]' in the commit message.",
+            "reaches apps (a pure refactor), add a line '[no changelog]' to the commit message.",
             file=sys.stderr,
         )
         return 1
