@@ -8,18 +8,16 @@ on:
   workflow_call:
 
 jobs:
-  # Pull requests: changes that reach apps add a changelog line, and released
-  # notes never change (scripts/changelog_check.py).
+  # Pushes to main: commits that change something apps get also add a
+  # changelog line (scripts/changelog_check.py).
   changelog:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: >-
-          python3 scripts/changelog_check.py "origin/${{ github.base_ref }}"
-          ${{ contains(github.event.pull_request.labels.*.name, 'no changelog') && '--skip' || '' }}
+      - run: python3 scripts/changelog_check.py "${{ github.event.before }}"
 
   guide:
     runs-on: ubuntu-latest

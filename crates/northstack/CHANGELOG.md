@@ -5,7 +5,7 @@ versions it moves an app past, so each one says exactly what an app must
 change, under **Upgrade**, as steps an agent can follow.
 
 Every change that affects apps adds a line under **Unreleased** in the same
-pull request (CI checks this). A release turns **Unreleased** into the new
+commit (CI checks this). A release turns **Unreleased** into the new
 version's section (`python3 scripts/release.py`).
 
 ## Unreleased

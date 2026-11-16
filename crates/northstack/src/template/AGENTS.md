@@ -30,20 +30,20 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 
 ## Shipping a change
 
-The human prompts; you do the whole flow, through a pull request:
+The human prompts; you do the whole flow. Work on `main` and push to it:
 
-1. Branch from an up-to-date `main`.
+1. Start from an up-to-date `main` (`git pull`).
 2. Make the change with tests; `just verify` passes (and `just e2e` if pages changed).
-3. Commit (generated files included), push, `gh pr create`.
-4. Wait for CI (`gh pr checks <number> --watch`). If it fails, read the log
-   (`gh run view <run-id> --log-failed`), fix, push, repeat. Never merge red.
-5. Merge when CI is green and the human asked for it to land:
-   `gh pr merge <number> --squash --delete-branch`.
-6. Deploy only commits whose CI passed, as described in
+3. Commit (generated files included) and `git push origin main`.
+4. Watch CI on that commit (`gh run list --branch main --limit 3`, then
+   `gh run watch <id>`). If it fails, read the log
+   (`gh run view <id> --log-failed`) and push a fix right away; `main` must
+   never stay red.
+5. Deploy only commits whose CI passed, as described in
    [docs/northstack.md](docs/northstack.md) ("Running in production").
 
-Don't push to `main` directly or force-push it. Upgrade northstack in its own
-PR (`just upgrade`, then follow the notes it prints).
+Never force-push `main` or push while `just verify` fails. Upgrade northstack
+in its own commit (`just upgrade`, then follow the notes it prints).
 
 ## Never
 

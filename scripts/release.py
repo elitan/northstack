@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`python3 scripts/release.py <patch|minor|major|X.Y.Z>`: open the release PR.
+"""`python3 scripts/release.py <patch|minor|major|X.Y.Z>`: release a version.
 
 Run on an up-to-date, clean `main`. It:
 
@@ -9,14 +9,14 @@ Run on an up-to-date, clean `main`. It:
    change something: that's a minor release before 1.0, major after);
 3. turns the changelog's **Unreleased** section into the version's section and
    sets the version in crates/northstack/Cargo.toml and Cargo.lock;
-4. commits on `release/v<version>`, pushes, and opens a PR with the notes.
+4. commits "Release v<version>" and pushes it to `main`.
 
-Merging that PR releases: .github/workflows/release.yml sees a version on
-`main` without a tag, runs all checks, tags it, publishes the crate and
-creates the GitHub release.
+The push releases: .github/workflows/release.yml sees a version on `main`
+without a tag, runs all checks, publishes the crate, then creates the tag and
+GitHub release.
 
-`--no-push` stops after the commit (to try it locally); `git switch main &&
-git branch -D release/v<version>` undoes it.
+`--no-push` stops after the commit (to try it locally); `git reset --hard
+origin/main` undoes it.
 """
 
 from __future__ import annotations
@@ -106,8 +106,6 @@ def main(argv: list[str]) -> None:
     run("git", "fetch", "--quiet", "--tags", "origin", "main")
     if run("git", "rev-parse", "HEAD") != run("git", "rev-parse", "origin/main"):
         die("main isn't the same as origin/main (git pull, or push/merge your work first)")
-    if push:
-        run("gh", "auth", "status")
 
     tags = [t[1:] for t in run("git", "tag", "--list", "v*").split() if VERSION.match(t[1:])]
     latest = max(tags, key=key) if tags else None
@@ -125,9 +123,7 @@ def main(argv: list[str]) -> None:
         die("Unreleased has **Upgrade:** steps (apps must change something); release it as "
             "'minor' (before 1.0) or 'major', not a patch")
 
-    branch = f"release/v{target}"
-    print(f"releasing {target} (latest release: {latest or 'none'}) on {branch}")
-    run("git", "switch", "--quiet", "-c", branch)
+    print(f"releasing {target} (latest release: {latest or 'none'})")
 
     # "## Unreleased" stays, now empty; the notes move under the new heading.
     rest = changelog[end:]
@@ -141,15 +137,11 @@ def main(argv: list[str]) -> None:
     run("git", "add", "-A")
     run("git", "commit", "--quiet", "-m", f"Release v{target}\n\n{body}")
     if not push:
-        print(f"committed on {branch} (not pushed). Undo: git switch main && git branch -D {branch}")
+        print("committed on main (not pushed). Undo: git reset --hard origin/main")
         return
-    run("git", "push", "--quiet", "-u", "origin", branch)
-    pr_body = (f"{body}\n\n---\n\nMerging this releases **v{target}**: the release workflow runs "
-               "all checks on `main`, tags the merge commit, publishes the crate to crates.io and "
-               "creates the GitHub release with the notes above.")
-    url = run("gh", "pr", "create", "--base", "main", "--head", branch,
-              "--title", f"Release v{target}", "--body", pr_body)
-    print(url)
+    run("git", "push", "--quiet", "origin", "main")
+    print(f"pushed 'Release v{target}' to main; the release workflow takes it from here:\n"
+          "  gh run list --workflow release.yml --limit 1")
 
 
 if __name__ == "__main__":

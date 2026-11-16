@@ -32,23 +32,25 @@ on the result. It also checks that every path the docs mention exists.
 
 ## Shipping a change
 
-The human prompts; you do the whole flow. Every change goes through a pull
-request, never straight to `main`:
+The human prompts; you do the whole flow. Work on `main` and push to it, no
+pull requests:
 
-1. Branch from an up-to-date `main` (`git switch main && git pull && git switch -c <topic>`).
+1. Start from an up-to-date `main` (`git pull`).
 2. Make the change, with tests. If it reaches apps (see "The changelog"), add
    its line under `## Unreleased` in `crates/northstack/CHANGELOG.md` in the
-   same PR.
-3. `just verify` passes (plus `just e2e` / `python3 scripts/guide_test.py` when
-   they apply). Commit, push, `gh pr create`.
-4. Wait for CI: `gh pr checks <number> --watch`. If it fails, read the log
-   (`gh run view <run-id> --log-failed`), fix, push, repeat. Never merge red.
-5. Merge when CI is green and the human asked for the change to land:
-   `gh pr merge <number> --squash --delete-branch`.
+   same commit.
+3. Before pushing, all of these pass: `just verify`, `just e2e` (if pages
+   changed), `python3 scripts/guide_test.py` (if the guide, template, CLI or
+   scripts changed) and `python3 scripts/changelog_check.py origin/main`.
+4. Commit and `git push origin main`.
+5. Watch CI on that commit: `gh run list --branch main --limit 3`, then
+   `gh run watch <id>`. If it fails, read the log
+   (`gh run view <id> --log-failed`) and push a fix right away; `main` must
+   never stay red.
 
-Never: push to `main` directly, force-push `main`, rewrite or delete a `v*`
-tag, run `cargo publish` by hand, or skip a failing check. If something needs
-one of these, stop and ask the human.
+Never: force-push `main`, rewrite or delete a `v*` tag, run `cargo publish` by
+hand, or push while a check you could run locally is failing. If something
+needs one of these, stop and ask the human.
 
 ## The changelog
 
@@ -64,11 +66,12 @@ one of these, stop and ask the human.
   `server/src/features/*/procedures.rs`", "copy this block into your
   Dockerfile"), or `**Upgrade:** nothing to do.`
 - Changes to tests, docs, benchmarks or the example feature need nothing. A
-  pure refactor of the crate with no visible effect: label the PR `no changelog`.
+  pure refactor of the crate with no visible effect: put `[no changelog]` in
+  the commit message.
 - Released sections never change.
 
-CI (`framework.yml`, job `changelog`) fails a PR that changes something apps
-get without touching the changelog.
+CI (`framework.yml`, job `changelog`) fails a push to `main` that changes
+something apps get without touching the changelog.
 
 ## The framework
 
@@ -95,7 +98,7 @@ crates/northstack/
   GUIDE.md                The guide; apps get it as docs/northstack.md
   CHANGELOG.md            Every release, with upgrade steps; `just upgrade` prints them
 scripts/guide_test.py     Tests `northstack new` and the guide (see above)
-scripts/release.py        Opens a release PR (see "Releasing a version")
+scripts/release.py        Releases a version (see "Releasing a version")
 scripts/release_notes.py  Checks a release tag and prints its changelog section
 scripts/changelog_check.py CI: changelog lines for changes that reach apps
 .github/workflows/        ci.yml (also copied into apps), framework.yml, release.yml
@@ -133,19 +136,17 @@ When the human asks for a release ("release", "ship a new version"):
    whatever you pass.)
 2. On a clean, up-to-date `main`: `python3 scripts/release.py <patch|minor|major>`.
    It refuses an empty `Unreleased` and a patch with upgrade steps, moves
-   `Unreleased` into the new version's section, bumps the crate version and
-   opens the PR `Release v<version>`.
-3. Wait for its CI and merge it (`gh pr checks <n> --watch`,
-   `gh pr merge <n> --squash --delete-branch`).
-4. The merge starts `.github/workflows/release.yml` on `main`: all checks,
-   then `cargo publish`, then the `v<version>` tag and GitHub release with the
+   `Unreleased` into the new version's section, bumps the crate version,
+   commits `Release v<version>` and pushes it to `main`.
+3. That push starts `.github/workflows/release.yml`: all checks, then
+   `cargo publish`, then the `v<version>` tag and GitHub release with the
    changelog section as notes. Watch it: `gh run list --workflow release.yml
    --limit 1`, then `gh run watch <id>`.
-5. Confirm: `gh release view v<version>` and `cargo search northstack --limit 1`
+4. Confirm: `gh release view v<version>` and `cargo search northstack --limit 1`
    show the version. Report both links to the human.
 
-If the release workflow fails, read the log, fix the cause on `main` through a
-normal PR (the next push to `main` retries the release), or re-run it with
+If the release workflow fails, read the log, push a fix to `main` (that push
+retries the release), or re-run it with
 `gh workflow run release.yml`. A version that's already on crates.io isn't
 published again. A published version can't be replaced; ship a new patch
 instead.

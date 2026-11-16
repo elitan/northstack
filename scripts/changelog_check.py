@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""`python3 scripts/changelog_check.py <base>`: a pull request that changes
-something apps get must also change crates/northstack/CHANGELOG.md (a line
-under `## Unreleased`). CI runs it against the PR's base branch.
+"""`python3 scripts/changelog_check.py <base>`: commits that change something
+apps get must also change crates/northstack/CHANGELOG.md (a line under
+`## Unreleased`). Run it before pushing (`<base>` = origin/main); CI runs it on
+every push to main for the pushed commits.
 
 "Something apps get": the framework crate (not its tests), or a template file
 apps keep a copy of (APP_FILES). Tests, docs, benchmarks and the example
-feature need nothing. A pure refactor can skip the check with the PR label
-`no changelog` (CI passes --skip).
+feature need nothing. A pure refactor can skip the check with `[no changelog]`
+in one of the commit messages.
 """
 
 from __future__ import annotations
@@ -32,17 +33,26 @@ def app_facing(path: str) -> bool:
 
 
 def main(base: str) -> int:
+    if set(base) == {"0"}:  # a new branch on GitHub: nothing to compare against
+        print("changelog check skipped (no previous commit)")
+        return 0
     changed = subprocess.run(
         ["git", "diff", "--name-only", f"{base}...HEAD"], capture_output=True, text=True, check=True
     ).stdout.split()
     reaching = [f for f in changed if app_facing(f)]
+    messages = subprocess.run(
+        ["git", "log", "--format=%B", f"{base}..HEAD"], capture_output=True, text=True, check=True
+    ).stdout
+    if "[no changelog]" in messages:
+        print("changelog check skipped ([no changelog] in a commit message)")
+        return 0
     if reaching and CHANGELOG not in changed:
         print(
             "error: these changes reach apps, but " + CHANGELOG + " didn't change:\n  "
             + "\n  ".join(reaching)
             + "\n\nAdd a line under '## Unreleased': what changed, then '**Upgrade:**' with the "
             "steps an agent follows in an app (or '**Upgrade:** nothing to do.'). If nothing "
-            "reaches apps (a pure refactor), label the PR 'no changelog'.",
+            "reaches apps (a pure refactor), put '[no changelog]' in the commit message.",
             file=sys.stderr,
         )
         return 1
@@ -51,10 +61,7 @@ def main(base: str) -> int:
 
 
 if __name__ == "__main__":
-    if "--skip" in sys.argv:
-        print("changelog check skipped (label 'no changelog')")
-        sys.exit(0)
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    args = sys.argv[1:]
     if len(args) != 1:
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
         sys.exit(2)
