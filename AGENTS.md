@@ -32,21 +32,23 @@ on the result. It also checks that every path the docs mention exists.
 
 ## Shipping a change
 
-The human prompts; you do the whole flow. Work on `main` and push to it, no
-pull requests:
+The human prompts; you do the whole flow. Push to `main` unless the human asks
+for a pull request:
 
-1. Start from an up-to-date `main` (`git pull`).
+1. Start from an up-to-date `main` (`git pull`); for a PR, then `git switch -c <topic>`.
 2. Make the change, with tests. If it reaches apps (see "The changelog"), add
    its line under `## Unreleased` in `crates/northstack/CHANGELOG.md` in the
    same commit.
 3. Before pushing, all of these pass: `just verify`, `just e2e` (if pages
    changed), `python3 scripts/guide_test.py` (if the guide, template, CLI or
    scripts changed) and `python3 scripts/changelog_check.py origin/main`.
-4. Commit and `git push origin main`.
-5. Watch CI on that commit: `gh run list --branch main --limit 3`, then
+4. Commit and `git push origin main`. For a PR: push the branch,
+   `gh pr create`, and merge with `gh pr merge <n> --squash --delete-branch`
+   once CI is green and the human wants it in.
+5. Watch CI on the commit: `gh run list --branch <branch> --limit 3`, then
    `gh run watch <id>`. If it fails, read the log
    (`gh run view <id> --log-failed`) and push a fix right away; `main` must
-   never stay red.
+   never stay red, and a red PR is never merged.
 
 Never: force-push `main`, rewrite or delete a `v*` tag, run `cargo publish` by
 hand, or push while a check you could run locally is failing. If something
@@ -70,8 +72,8 @@ needs one of these, stop and ask the human.
   the commit message.
 - Released sections never change.
 
-CI (`framework.yml`, job `changelog`) fails a push to `main` that changes
-something apps get without touching the changelog.
+CI (`framework.yml`, job `changelog`) fails a push to `main` or a PR that
+changes something apps get without touching the changelog.
 
 ## The framework
 

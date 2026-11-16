@@ -30,15 +30,19 @@ just verify    # before you're done: check + fmt + clippy + tests + build
 
 ## Shipping a change
 
-The human prompts; you do the whole flow. Work on `main` and push to it:
+The human prompts; you do the whole flow. Push to `main` unless the human asks
+for a pull request:
 
-1. Start from an up-to-date `main` (`git pull`).
+1. Start from an up-to-date `main` (`git pull`); for a PR, then `git switch -c <topic>`.
 2. Make the change with tests; `just verify` passes (and `just e2e` if pages changed).
-3. Commit (generated files included) and `git push origin main`.
-4. Watch CI on that commit (`gh run list --branch main --limit 3`, then
+3. Commit (generated files included) and `git push origin main`. For a PR:
+   push the branch, `gh pr create`, and merge with
+   `gh pr merge <n> --squash --delete-branch` once CI is green and the human
+   wants it in.
+4. Watch CI on the commit (`gh run list --branch <branch> --limit 3`, then
    `gh run watch <id>`). If it fails, read the log
    (`gh run view <id> --log-failed`) and push a fix right away; `main` must
-   never stay red.
+   never stay red, and a red PR is never merged.
 5. Deploy only commits whose CI passed, as described in
    [docs/northstack.md](docs/northstack.md) ("Running in production").
 

@@ -2,7 +2,7 @@
 """`python3 scripts/changelog_check.py <base>`: commits that change something
 apps get must also change crates/northstack/CHANGELOG.md (a line under
 `## Unreleased`). Run it before pushing (`<base>` = origin/main); CI runs it on
-every push to main for the pushed commits.
+pushes to main and on pull requests.
 
 "Something apps get": the framework crate (not its tests), or a template file
 apps keep a copy of (APP_FILES). Tests, docs, benchmarks and the example
