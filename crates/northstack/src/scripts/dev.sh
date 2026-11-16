@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Local dev environment, built for agents: every command returns when its
-# result is ready, and logs go to files instead of a terminal stream.
+# `northstack dev` (`just dev`): the local dev environment, built for agents:
+# every command returns when its result is ready, and logs go to files instead
+# of a terminal stream. Runs in the app root; $NORTHSTACK is the northstack CLI.
 #
-#   scripts/dev.sh [start]   start the api and Vite in the background;
-#                            returns once both answer (idempotent)
-#   scripts/dev.sh stop      stop the api and Vite
-#   scripts/dev.sh status    what is running, and where
-#   scripts/dev.sh reload    restart the api with the current binary and wait
-#                            until it is ready (`just check` does this for you)
-#   scripts/dev.sh logs      recent warnings and errors from the api and Vite
-#   scripts/dev.sh logs all  the last 100 lines of each log
+#   dev [start]   start the api and Vite in the background;
+#                 returns once both answer (idempotent)
+#   dev stop      stop the api and Vite
+#   dev status    what is running, and where
+#   dev reload    restart the api with the current binary and wait
+#                 until it is ready (`just check` does this for you)
+#   dev logs      recent warnings and errors from the api and Vite
+#   dev logs all  the last 100 lines of each log
 #
 # The database is a file (DATABASE_URL in .env, default data/dev.db); there is
 # no database server to start.
@@ -19,10 +20,12 @@
 # (also after a crash, so the next passing check brings it back).
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+: "${NORTHSTACK:?run this through the northstack CLI}"
 
 DIR=.dev
 mkdir -p "$DIR"
+# The binary `just check` builds (CARGO_TARGET_DIR moves it).
+APP="${CARGO_TARGET_DIR:-target}/debug/app"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
@@ -73,13 +76,13 @@ wait_for() {
 }
 
 start_api() {
-  [[ -x target/debug/app ]] || die "target/debug/app is missing; run 'just check'"
+  [[ -x $APP ]] || die "$APP is missing; run 'just check'"
   port_busy "$PORT" && die "port $PORT is in use by $(port_owner "$PORT")"
   : >"$DIR/api.log"
   # `just logs` shows Vite lines only from here on (older ones are stale).
-  wc -l <"$DIR/web.log" 2>/dev/null | tr -d ' ' >"$DIR/web.mark" || echo 0 >"$DIR/web.mark"
+  if [[ -f $DIR/web.log ]]; then wc -l <"$DIR/web.log" | tr -d ' '; else echo 0; fi >"$DIR/web.mark"
   set -m
-  NO_COLOR=1 LOG_FORMAT=pretty nohup ./target/debug/app >>"$DIR/api.log" 2>&1 </dev/null &
+  NO_COLOR=1 LOG_FORMAT=pretty nohup "$APP" >>"$DIR/api.log" 2>&1 </dev/null &
   echo $! >"$DIR/api.pid"
   set +m
   if ! wait_for api "http://localhost:$PORT/readyz" 30; then
@@ -124,7 +127,7 @@ cmd_start() {
   touch "$DIR/active"
   if ! running api; then
     # Migrate, regenerate, compile and typecheck before starting anything.
-    ./scripts/check.sh --no-reload || exit 1
+    "$NORTHSTACK" check --no-reload || exit 1
     start_api
   fi
   running web || start_web

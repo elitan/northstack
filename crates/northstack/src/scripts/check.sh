@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# The one command agents run. Regenerates everything in the right order and
-# checks it, printing only what failed and how to fix it.
+# `northstack check` (`just check`): the one command agents run. Regenerates
+# everything in the right order and checks it, printing only what failed and how
+# to fix it. Runs in the app root; $NORTHSTACK is the northstack CLI.
 #
-#   scripts/check.sh           fast loop: migrate, gen-db, compile, gen-ts, typecheck
-#   scripts/check.sh --full    + format, lint, tests, offline query cache, frontend build
-#   scripts/check.sh --ci      like --full, but verifies generated files instead of
+#   check           fast loop: migrate, gen-db, compile, gen-ts, typecheck
+#   check --full    + format, lint, tests, offline query cache, frontend build
+#   check --ci      like --full, but verifies generated files instead of
 #                              writing them (fails if someone forgot to regenerate)
 #   --no-reload                don't restart the running dev server
 #
@@ -15,7 +16,7 @@
 # Exit code 0 means everything passed.
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+: "${NORTHSTACK:?run this through the northstack CLI}"
 
 MODE="check"
 RELOAD=1
@@ -56,10 +57,14 @@ step() {
   fi
 }
 
+# The server embeds web/dist; it must exist before the first compile (the
+# frontend build fills it). build.rs also creates it, but only when it runs.
+mkdir -p web/dist
+
 CI_FLAG=""
 [[ $MODE == "ci" ]] && CI_FLAG="--check"
 
-northstack() { cargo run -q -p northstack --bin northstack -- "$@"; }
+northstack() { "$NORTHSTACK" "$@"; }
 app() { cargo run -q -p server -- "$@"; }
 
 step migrate \
@@ -88,7 +93,7 @@ step typecheck \
 if [[ $RELOAD == 1 && -f .dev/active ]]; then
   step reload \
     "The api compiled but crashed on startup. Read the log lines above (full log: .dev/api.log), fix, and run 'just check' again." \
-    ./scripts/dev.sh reload
+    "$NORTHSTACK" dev reload
 fi
 
 if [[ $MODE == "check" ]]; then
@@ -117,7 +122,7 @@ step test \
 sqlx_cache() {
   local db="target/sqlx-prepare.db"
   rm -f "$db" "$db-wal" "$db-shm"
-  DATABASE_URL="sqlite:$db" cargo run -q -p northstack --bin northstack -- migrate >/dev/null &&
+  DATABASE_URL="sqlite:$db" "$NORTHSTACK" migrate >/dev/null &&
     DATABASE_URL="sqlite:$db" cargo sqlx prepare --workspace "$@" -- --all-targets
 }
 if [[ $MODE == "ci" ]]; then

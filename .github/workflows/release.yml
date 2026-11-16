@@ -1,0 +1,58 @@
+# Release: push a tag `v<version>` (matching crates/northstack/Cargo.toml) and
+# this checks everything, publishes the crate to crates.io and creates the
+# GitHub release. Framework-only: not copied into apps.
+#
+# Publishing uses crates.io trusted publishing (no token in the repository):
+# after the first manual publish, add this repository and workflow
+# (release.yml) under the crate's Settings -> Trusted Publishing on crates.io.
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+# One release at a time.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Fail in seconds on a tag that doesn't match the crate or has no changelog.
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  ci:
+    needs: notes
+    uses: ./.github/workflows/ci.yml
+
+  framework:
+    needs: notes
+    uses: ./.github/workflows/framework.yml
+
+  publish:
+    needs: [ci, framework]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # trusted publishing to crates.io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish -p northstack --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,5 +1,9 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:
 
 jobs:
   ci:
@@ -21,9 +25,6 @@ jobs:
       # Migrates a fresh database, then verifies every generated file is up to
       # date and runs format, lint, tests and the frontend build.
       - run: just ci
-      # The README is the product: run its walkthrough exactly as written,
-      # starting from `just remove-example`, in a temporary copy.
-      - run: just readme-test
       # Browser smoke tests: the real binary (frontend embedded) in headless Chromium.
       - run: cd web && bunx playwright install --with-deps chromium
       - run: just e2e

@@ -10,7 +10,7 @@ name = "app"
 path = "src/main.rs"
 
 [dependencies]
-northstack = { path = "../crates/northstack" }
+northstack.workspace = true
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

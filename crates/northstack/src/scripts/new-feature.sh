@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Scaffold a feature module: ./scripts/new-feature.sh <snake_case_name>
+# `northstack new-feature <snake_case_name>` (`just new-feature`): scaffold a
+# feature module. Runs in the app root.
 set -euo pipefail
 
 name="${1:-}"
@@ -7,7 +8,7 @@ if [[ ! "$name" =~ ^[a-z][a-z0-9_]*$ ]]; then
   echo "usage: just new-feature <snake_case_name>" >&2
   exit 1
 fi
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(pwd)"
 dir="$root/server/src/features/$name"
 if [[ -e "$dir" ]]; then
   echo "feature $name already exists" >&2
@@ -115,4 +116,4 @@ open(path, "w").write(s)
 PY
 
 echo "created server/src/features/${name} and server/tests/${name}.rs; procedure ${prefix}.ping registered"
-echo "next: README.md -> 'Building a feature, end to end'. Loop on 'just check', finish with 'just verify'."
+echo "next: docs/northstack.md -> 'Building a feature, end to end'. Loop on 'just check', finish with 'just verify'."

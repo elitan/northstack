@@ -13,6 +13,7 @@
 //! - [`App`]: one binary with `all | serve | worker | migrate | gen-ts` modes
 
 pub mod app;
+pub mod cli;
 pub mod codegen;
 pub mod cpu;
 pub mod cron;

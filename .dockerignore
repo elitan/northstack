@@ -1,7 +1,11 @@
 target
 web/node_modules
 web/dist
+web/test-results
+web/playwright-report
+web/tsconfig.tsbuildinfo
 .env
 .git
+.dev
 data
 bench

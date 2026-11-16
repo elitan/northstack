@@ -1,0 +1,28 @@
+# Framework-only checks. Not copied into apps (ci.yml is).
+name: framework
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # The release workflow runs it (and ci.yml) before publishing.
+  workflow_call:
+
+jobs:
+  guide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,sqlx-cli
+      - run: cd web && bun install --frozen-lockfile
+      # `northstack new` creates an app that passes `just check`, and the
+      # guide's feature walkthrough works in it exactly as written.
+      - run: python3 scripts/guide_test.py
+      # The crate packages and builds on its own, as crates.io will see it.
+      - run: cargo publish -p northstack --dry-run
