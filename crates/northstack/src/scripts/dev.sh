@@ -29,12 +29,9 @@ APP="${CARGO_TARGET_DIR:-target}/debug/app"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# The CLI has loaded .env (creating it from .env.example if missing), without
+# overriding variables that were already set.
 load_env() {
-  if [[ ! -f .env ]]; then
-    cp .env.example .env
-    echo "created .env from .env.example"
-  fi
-  set -a; . ./.env; set +a
   : "${DATABASE_URL:?DATABASE_URL is not set in .env}"
   export PORT="${PORT:-3000}" WEB_PORT="${WEB_PORT:-5173}"
 }

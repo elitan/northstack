@@ -67,7 +67,8 @@ one of these, stop and ask the human.
   pure refactor of the crate with no visible effect: label the PR `no changelog`.
 - Released sections never change.
 
-CI (`framework.yml`, job `changelog`) enforces all three.
+CI (`framework.yml`, job `changelog`) fails a PR that changes something apps
+get without touching the changelog.
 
 ## The framework
 
@@ -136,27 +137,22 @@ When the human asks for a release ("release", "ship a new version"):
    opens the PR `Release v<version>`.
 3. Wait for its CI and merge it (`gh pr checks <n> --watch`,
    `gh pr merge <n> --squash --delete-branch`).
-4. The merge starts `.github/workflows/release.yml` on `main`: all checks on
-   the merged commit, then the `v<version>` tag, `cargo publish`, and the
-   GitHub release with the changelog section as notes. Watch it:
-   `gh run list --workflow release.yml --limit 1`, then `gh run watch <id>`.
+4. The merge starts `.github/workflows/release.yml` on `main`: all checks,
+   then `cargo publish`, then the `v<version>` tag and GitHub release with the
+   changelog section as notes. Watch it: `gh run list --workflow release.yml
+   --limit 1`, then `gh run watch <id>`.
 5. Confirm: `gh release view v<version>` and `cargo search northstack --limit 1`
    show the version. Report both links to the human.
 
 If the release workflow fails, read the log, fix the cause on `main` through a
-normal PR, then re-run it (`gh workflow run release.yml`). It continues where it
-stopped: it skips the checks once the version is tagged, and every step that's
-already done. A published version can't be replaced; ship a new patch instead.
+normal PR (the next push to `main` retries the release), or re-run it with
+`gh workflow run release.yml`. A version that's already on crates.io isn't
+published again. A published version can't be replaced; ship a new patch
+instead.
 
-**crates.io access (the human, once).** The workflow publishes with a
-`CARGO_REGISTRY_TOKEN` repository secret until crates.io trusted publishing is
-set up for this repository; then it needs no secret. If the publish step fails
-with an authentication error, stop and ask the human to do one of these:
-
-- create a crates.io API token (scopes `publish-new`, `publish-update`, crate
-  `northstack`) and run `gh secret set CARGO_REGISTRY_TOKEN --repo elitan/northstack`;
-- or, once the crate exists, add trusted publishing on crates.io (crate
-  settings: repository `elitan/northstack`, workflow `release.yml`,
-  environment `release`) and delete the secret.
-
-Never ask for the token in chat or handle it yourself.
+**crates.io access (the human, once).** Publishing needs the repository secret
+`CARGO_REGISTRY_TOKEN`. If it's missing or the publish step fails with an
+authentication error, stop and ask the human to create a crates.io API token
+(scopes `publish-new` and `publish-update`) and run
+`gh secret set CARGO_REGISTRY_TOKEN --repo elitan/northstack`. Never ask for
+the token in chat or handle it yourself.

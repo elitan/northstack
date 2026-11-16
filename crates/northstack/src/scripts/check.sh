@@ -29,7 +29,7 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
+# .env is already loaded by the CLI (without overriding variables already set).
 export CARGO_TERM_COLOR=never NO_COLOR=1
 
 LOG="$(mktemp)"

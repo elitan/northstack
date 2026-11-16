@@ -58,7 +58,6 @@ sed -i.bak 's|Back to notes|Back home|' web/app/not-found.tsx && rm web/app/not-
 echo "removed the example app"
 
 # Regenerate everything for the empty app.
-if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
 if [[ -n ${DATABASE_URL:-} ]] && "$NORTHSTACK" db-reset >/dev/null 2>&1; then
   "$NORTHSTACK" check --no-reload
   echo
