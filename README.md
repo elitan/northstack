@@ -17,12 +17,12 @@ northstack is an open-source, full-stack web framework: a **Rust** backend
 (axum, sqlx), a **React** frontend with Next.js-style folder routing, and
 **SQLite**.
 
+- **Typed end to end.** Types are generated from your SQLite schema: the
+  tables become Rust types, your Rust procedures become a typed TypeScript
+  client (like tRPC), and every SQL query is checked at compile time. Rename a
+  column and `just check` shows every query and page it breaks.
 - **One binary.** The server, the frontend and the database engine build into
   one file you copy to a server, like PocketBase. No database server to run.
-- **Typed end to end.** SQL queries are checked at compile time, your schema
-  becomes Rust types, and your Rust procedures become a typed TypeScript
-  client, like tRPC. Rename a column and the compiler shows every page it
-  breaks.
 - **Built for coding agents.** Claude Code, Codex and Cursor write and maintain
   northstack apps: there's one obvious way to do everything, and the compiler
   catches mistakes before you ever see them.

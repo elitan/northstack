@@ -3,9 +3,9 @@
 Rust, React and SQLite in one binary, typed end to end.
 
 A full-stack web framework: a Rust backend (axum, sqlx), a React frontend with
-Next.js-style folder routing, and SQLite. SQL is checked at compile time, the
-schema becomes Rust types, and Rust procedures become a typed TypeScript
-client. The whole app ships as one binary. Built for apps that AI coding
+Next.js-style folder routing, and SQLite. Types are generated from the SQLite
+schema: tables become Rust types, Rust procedures become a typed TypeScript
+client, and SQL is checked at compile time. The whole app ships as one binary. Built for apps that AI coding
 agents write and maintain.
 
 ```sh
