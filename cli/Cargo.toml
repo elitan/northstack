@@ -1,0 +1,10 @@
+# The northstack CLI at the version this app depends on. `just` runs it
+# (`cargo run -q -p cli -- <command>`). Don't add code here.
+[package]
+name = "cli"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+northstack.workspace = true

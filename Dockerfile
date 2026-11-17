@@ -18,12 +18,9 @@ FROM rust:1-bookworm AS build
 WORKDIR /src
 # Queries are checked against the committed .sqlx cache; no database needed.
 ENV SQLX_OFFLINE=true
-COPY Cargo.toml Cargo.lock ./
-# Build settings (SQLite compile flags for concurrency).
-COPY .cargo .cargo
-COPY crates crates
-COPY server server
-COPY .sqlx .sqlx
+# The workspace (.dockerignore leaves out build output and local data),
+# including .cargo (SQLite compile flags) and .sqlx.
+COPY . .
 COPY --from=web /src/web/dist web/dist
 RUN cargo build --release -p server && strip target/release/app
 # An empty /data owned by the runtime user, so it works without a volume too.

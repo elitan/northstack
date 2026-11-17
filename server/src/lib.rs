@@ -1,5 +1,5 @@
 //! The application. Features live in `features/<name>/` and are wired up in
-//! [`build`]. See README.md ("The guide") and AGENTS.md for conventions.
+//! [`build`]. See docs/northstack.md (the guide) and AGENTS.md for conventions.
 
 pub mod db;
 pub mod features;

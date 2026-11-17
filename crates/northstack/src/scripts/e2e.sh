@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# `just e2e`: browser smoke tests against the real binary.
+# `northstack e2e` (`just e2e`): browser smoke tests against the real binary.
+# Runs in the app root; $NORTHSTACK is the northstack CLI.
 #
 # Builds the frontend, embeds it in the server binary, starts that binary on
 # E2E_PORT (default 3100) with its own database (target/e2e/app.db, reset each run),
@@ -9,7 +10,7 @@
 #   just e2e notes            only files matching "notes" (args go to Playwright)
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+: "${NORTHSTACK:?run this through the northstack CLI}"
 
 if ! command -v cargo >/dev/null && [[ -x /opt/homebrew/opt/rustup/bin/cargo ]]; then
   export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
@@ -29,13 +30,13 @@ echo "build    frontend + binary"
 cargo build -q -p server
 # Compile against the dev database (sqlx checks queries); run against the e2e one.
 export DATABASE_URL="$E2E_DB"
-cargo run -q -p northstack --bin northstack -- db-reset >/dev/null
+"$NORTHSTACK" db-reset >/dev/null
 
 # Downloads Chromium on the first run; a no-op after that.
 (cd web && bunx playwright install chromium >/dev/null)
 
 echo "start    $E2E_URL (log: $LOG)"
-PORT=$PORT RUST_LOG=warn target/debug/app >"$LOG" 2>&1 &
+PORT=$PORT RUST_LOG=warn "${CARGO_TARGET_DIR:-target}/debug/app" >"$LOG" 2>&1 &
 APP=$!
 trap 'kill $APP 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do

@@ -3,6 +3,12 @@ name = "northstack"
 version = "0.1.0"
 license = "MIT"
 edition = "2024"
+rust-version = "1.88"
+description = "Full-stack web framework for AI coding agents: Rust, React and SQLite in one small binary."
+repository = "https://github.com/elitan/northstack"
+readme = "README.md"
+keywords = ["web", "framework", "fullstack", "react", "sqlite"]
+categories = ["web-programming", "web-programming::http-server", "command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.104"

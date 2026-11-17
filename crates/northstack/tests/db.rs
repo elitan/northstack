@@ -191,7 +191,7 @@ async fn file_path_is_the_file_and_refuses_memory() {
     assert_eq!(one, 1);
 }
 
-/// The table-rebuild migration documented in README ("Database" ->
+/// The table-rebuild migration documented in GUIDE.md ("Database" ->
 /// "Migrations") keeps rows in tables that reference the rebuilt one.
 #[tokio::test]
 async fn documented_table_rebuild_keeps_referencing_rows() {

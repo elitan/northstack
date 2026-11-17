@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# `just remove-example`: delete the example "notes" app so you start from an
-# empty app. The framework (crates/northstack), tooling and frontend shell stay.
+# `northstack remove-example` (`just remove-example`): delete the example
+# "notes" app so you start from an empty app. The tooling and frontend shell
+# stay. Runs in the app root; $NORTHSTACK is the northstack CLI.
 #
-#   scripts/remove-example.sh           refuses if git has uncommitted changes
-#   scripts/remove-example.sh --force   skip that check
+#   remove-example           refuses if git has uncommitted changes
+#   remove-example --force   skip that check
 #
 # Afterwards it resets the dev database and runs `just check`, which rewrites
 # every generated file for the empty app.
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+: "${NORTHSTACK:?run this through the northstack CLI}"
 
 # Homebrew's rustup is keg-only; find it even if it isn't on PATH.
 if ! command -v cargo >/dev/null && [[ -x /opt/homebrew/opt/rustup/bin/cargo ]]; then
@@ -45,7 +46,7 @@ export default function Home() {
       <title>Home</title>
       <h1>Your app starts here</h1>
       <p className="muted">
-        Add a feature with <code>just new-feature &lt;name&gt;</code>, then follow the guide in README.md.
+        Add a feature with <code>just new-feature &lt;name&gt;</code>, then follow the guide in docs/northstack.md.
       </p>
     </>
   );
@@ -57,11 +58,10 @@ sed -i.bak 's|Back to notes|Back home|' web/app/not-found.tsx && rm web/app/not-
 echo "removed the example app"
 
 # Regenerate everything for the empty app.
-if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
-if [[ -n ${DATABASE_URL:-} ]] && cargo run -q -p northstack --bin northstack -- db-reset >/dev/null 2>&1; then
-  ./scripts/check.sh --no-reload
+if [[ -n ${DATABASE_URL:-} ]] && "$NORTHSTACK" db-reset >/dev/null 2>&1; then
+  "$NORTHSTACK" check --no-reload
   echo
-  echo "next: just new-feature <name>, then README.md -> 'Building a feature, end to end'"
+  echo "next: just new-feature <name>, then docs/northstack.md -> 'Building a feature, end to end'"
 else
   echo "could not reset the database (DATABASE_URL, set in .env by 'just dev'); run 'just db-reset' to see why, then 'just check'"
 fi

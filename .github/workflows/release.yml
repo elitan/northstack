@@ -1,0 +1,76 @@
+# Release: on every push to main, if the crate version
+# (crates/northstack/Cargo.toml) has a changelog section but no `v<version>`
+# tag yet, i.e. a release PR from `python3 scripts/release.py` just merged:
+# run all checks, publish the crate, then create the tag and GitHub release.
+# Framework-only: not copied into apps.
+#
+# Needs the repository secret CARGO_REGISTRY_TOKEN (a crates.io token that can
+# publish `northstack`).
+name: release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        run: |
+          version=$(grep -m1 '^version = ' crates/northstack/Cargo.toml | cut -d'"' -f2)
+          release=false
+          if ! git rev-parse -q --verify "refs/tags/v$version" >/dev/null &&
+             python3 scripts/release_notes.py "v$version" >/dev/null 2>&1; then
+            release=true
+          fi
+          echo "v$version: release=$release"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  framework:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    uses: ./.github/workflows/framework.yml
+
+  publish:
+    needs: [plan, ci, framework]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag and the GitHub release
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Skipped if a previous run already published this version.
+      - name: Publish to crates.io
+        run: |
+          if cargo info "northstack@$VERSION" --registry crates-io >/dev/null 2>&1; then
+            echo "northstack $VERSION is already on crates.io"
+          else
+            cargo publish -p northstack --locked
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_notes.py "v$VERSION" > release-notes.md
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file release-notes.md

@@ -1,4 +1,4 @@
-// Browser smoke tests (`just e2e`). scripts/e2e.sh builds the release-style
+// Browser smoke tests (`just e2e`), which builds the release-style
 // binary, starts it on E2E_URL with its own database, then runs these.
 import { defineConfig } from "@playwright/test";
 

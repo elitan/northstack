@@ -4,5 +4,5 @@
 #   connection's page cache behind one global mutex, so parallel queries take
 #   turns. Measured: 11x more list requests/s at 10 concurrent users without it.
 # - SQLITE_DEFAULT_MEMSTATUS=0 drops a global mutex taken on every allocation.
-# crates/northstack/tests/db.rs checks that these flags are in effect.
+# The northstack crate's tests check that these flags are in effect.
 LIBSQLITE3_FLAGS = "-USQLITE_ENABLE_MEMORY_MANAGEMENT -DSQLITE_DEFAULT_MEMSTATUS=0"
