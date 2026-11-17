@@ -10,6 +10,8 @@ version's section (`python3 scripts/release.py`).
 
 ## Unreleased
 
+## 0.2.0
+
 - New apps' CI (`.github/workflows/ci.yml`) uses `actions/checkout@v7` and
   `actions/upload-artifact@v7`, which run on Node.js 24 (GitHub deprecated
   Node.js 20 for actions).
