@@ -1,8 +1,7 @@
 <h1 align="center">northstack</h1>
 
 <p align="center">
-  <strong>Build web apps with AI agents.</strong><br>
-  SQLite, Rust and React in one small binary.
+  <strong>Rust, React and SQLite in one binary, typed end to end.</strong>
 </p>
 
 <p align="center">
@@ -16,11 +15,17 @@
 
 northstack is an open-source, full-stack web framework: a **Rust** backend
 (axum, sqlx), a **React** frontend with Next.js-style folder routing, and
-**SQLite**, shipped as **one small binary**: no database server to run. It's
-built for apps that AI
-coding agents (Claude Code, Codex, Cursor) write and maintain: there's one
-obvious way to do everything, and the compiler catches mistakes before you ever
-see them.
+**SQLite**.
+
+- **One binary.** The server, the frontend and the database engine build into
+  one file you copy to a server, like PocketBase. No database server to run.
+- **Typed end to end.** SQL queries are checked at compile time, your schema
+  becomes Rust types, and your Rust procedures become a typed TypeScript
+  client, like tRPC. Rename a column and the compiler shows every page it
+  breaks.
+- **Built for coding agents.** Claude Code, Codex and Cursor write and maintain
+  northstack apps: there's one obvious way to do everything, and the compiler
+  catches mistakes before you ever see them.
 
 ## A feature in three files
 

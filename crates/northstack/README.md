@@ -1,8 +1,12 @@
 # northstack
 
-Full-stack web framework for AI coding agents: a Rust backend (axum, sqlx), a
-React frontend with Next.js-style folder routing, typed RPC in between, and
-SQLite, shipped as one small binary.
+Rust, React and SQLite in one binary, typed end to end.
+
+A full-stack web framework: a Rust backend (axum, sqlx), a React frontend with
+Next.js-style folder routing, and SQLite. SQL is checked at compile time, the
+schema becomes Rust types, and Rust procedures become a typed TypeScript
+client. The whole app ships as one binary. Built for apps that AI coding
+agents write and maintain.
 
 ```sh
 cargo install northstack --locked
