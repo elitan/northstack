@@ -10,6 +10,8 @@ version's section (`python3 scripts/release.py`).
 
 ## Unreleased
 
+## 0.2.1
+
 - `northstack new` resolves the app's `Cargo.lock` before the first commit, so
   the first build no longer leaves `Cargo.lock` modified (which made
   `just upgrade` refuse to run).
