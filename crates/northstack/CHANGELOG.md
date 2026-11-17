@@ -10,6 +10,8 @@ version's section (`python3 scripts/release.py`).
 
 ## Unreleased
 
+## 0.1.0
+
 First release: the Rust server (RPC, background jobs, cron, SQLite), the React
 frontend with folder routing and generated types, and the `northstack` CLI
 (`new`, `check`, `dev`, `e2e`, `new-feature`, `upgrade`, database commands).
