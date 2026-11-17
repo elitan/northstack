@@ -10,6 +10,12 @@ version's section (`python3 scripts/release.py`).
 
 ## Unreleased
 
+- `northstack new` resolves the app's `Cargo.lock` before the first commit, so
+  the first build no longer leaves `Cargo.lock` modified (which made
+  `just upgrade` refuse to run).
+
+  **Upgrade:** nothing to do.
+
 ## 0.2.0
 
 - New apps' CI (`.github/workflows/ci.yml`) uses `actions/checkout@v7` and

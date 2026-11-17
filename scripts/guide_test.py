@@ -137,6 +137,11 @@ def main() -> None:
     if code or "all checks passed" not in out:
         fail("just check in a new app", out,
              "A freshly created app doesn't pass `just check`. Fix the template or the CLI.", tmp)
+    code, out = sh("git status --porcelain", app, env)
+    if code or out.strip():
+        fail("clean tree after just check", out,
+             "Checking a new app changed committed files (`just upgrade` then refuses to run). "
+             "`northstack new` must commit them as the first build leaves them.", tmp)
     missing = missing_paths(
         app, [app / "AGENTS.md", app / "README.md", app / "docs/northstack.md"],
         ("server/", "web/", "cli/", "docs/", ".github/", ".sqlx/", ".cargo/"),

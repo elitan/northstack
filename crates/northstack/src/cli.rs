@@ -499,6 +499,19 @@ fn new_app(dir: &Path, local: Option<&Path>) -> anyhow::Result<()> {
     )?;
     write_guide(dir)?;
 
+    // The copied Cargo.lock has northstack from the repository path; resolve
+    // it against the app's dependency now (`cargo metadata` changes only what
+    // it must), so the first build doesn't leave Cargo.lock modified.
+    let locked = Command::new("cargo")
+        .args(["metadata", "--quiet", "--format-version", "1"])
+        .current_dir(dir)
+        .stdout(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if !locked {
+        println!("(updating Cargo.lock failed; the first build updates it)");
+    }
+
     let git = |args: &[&str]| {
         Command::new("git")
             .args(args)
